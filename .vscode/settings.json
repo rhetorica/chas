@@ -1,0 +1,17 @@
+{
+    "files.associations": {
+        "*.star": "html",
+        "new": "cpp",
+        "array": "cpp",
+        "compare": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp",
+        "type_traits": "cpp",
+        "utility": "cpp",
+        "algorithm": "cpp",
+        "string_view": "cpp",
+        "initializer_list": "cpp",
+        "optional": "cpp",
+        "system_error": "cpp"
+    }
+}

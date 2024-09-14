@@ -1,0 +1,29 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [{
+        "name": "C++ Launch (MinGW64)",
+        "program": "C:\\Lethe\\chas\\build\\chas.exe",
+        "args": ["--tokenize","test.chas"],
+        "cwd": "C:\\Lethe\\userland",
+        "type": "cppvsdbg",
+        "request": "launch",
+        "logging": {
+            "moduleLoad": false,
+            "trace": true
+        },
+    }, {
+        "name": "C++ Attach (MinGW64)",
+        "program": "C:\\Lethe\\chas\\build\\chas.exe",
+        "args": ["attached","d","f"],
+        "cwd": "C:\\Lethe\\userland",
+        "type": "cppvsdbg",
+        "request": "launch",
+        "logging": {
+            "moduleLoad": false,
+            "trace": true
+        },
+    }]
+}

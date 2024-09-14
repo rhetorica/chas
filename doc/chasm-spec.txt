@@ -1,0 +1,2407 @@
+
+
+
+                /////////  //     //  /////////  /////////  //      //
+               //     //  //     //  //     //  //         ////  ////
+              //         /////////  /////////  /////////  //  //  //
+             //     //  //     //  //     //         //  //      //
+            /////////  //     //  //     //  /////////  //      //
+
+                                CHASM WORKSTATION
+					 
+      				       ARCHITECTURE  SPECIFICATION
+
+                               Pharos Computer Inc
+
+                               Created: 2024-08-19
+                               Updated: 2024-09-14
+
+
+
+========
+CONTENTS
+========
+
+1. GENERAL
+  1.1. To Do
+  1.2. CHASM Versions
+2. REGISTERS
+  2.1. Data Formats
+    2.1.1. Unsigned Integers
+	2.1.2. Signed Integers
+	2.1.3. Bytes and Multi-Bytes
+	2.1.4. Floating Point Numbers
+	2.1.5. Binary-Coded Decimal
+	2.1.6. CONS Addresses
+	2.1.7. Bitwise
+	2.1.8. Drakira-Specific Datatypes
+3. INSTRUCTIONS
+  3.1. Arithmetic Instructions
+    3.1.1. Datatype Codes
+	3.1.2. Operation Codes
+	3.1.3. Reference Flag
+	3.1.4. Data Size Codes
+	3.1.5. Alternate Data Size Codes
+	3.1.6. Complete List of Arithmetic Instructions
+  3.2. Jump Instructions
+  3.3. Repeat Operations
+  3.4. Special Flow Control Operations
+  3.5. Debug Instructions
+  3.6. CHAS Directives
+  3.7. Optimization
+4. ADDRESSING
+  4.1. Reserved Addresses
+5. INTERRUPT ADDRESS TABLE
+  5.1. List of Interrupts
+  5.2. System Interrupts
+  5.3. OS Interrupts
+  5.4. Device Interrupts
+  5.5. IRET Types
+    5.5.1. Type A: Mapless
+	5.5.2. Type B: Interrupt Adds Mapping
+	5.5.3. Type C: Map-Escape Interrupt
+	5.5.4. Type D: Alternate-Map Interrupt
+	5.5.5. Type E: Same-Map Interrupt 
+6. MEMORY MAP TABLE
+  6.1. Leaving mapped mode
+7. PROCESSES & RINGS
+8. DEVICE MANAGEMENT TABLE
+9. HAIDEIA FIRMWARE ROM
+  9.1. Configuration UI
+  9.2. Firmware Interrupts
+  9.3. Recovery Environment (*)
+10. SPECIFIC DEVICES
+  10.1. The Atharti Video System
+  10.2. The Loec Pointer Device
+  10.3. The Kharaidon Keyboard Device
+  10.4. The Chroesh Beeper Device
+  10.5. The Vaul Power Control Device
+  10.6. The Drakira Vector Processor
+    10.6.1. Drakira Control Interrupts
+	10.6.2. Drakira Data Formats
+	10.6.3. Drakira Event Interrupts
+	10.6.4. Drakira Settings
+	10.6.5. The Drakira ISA (*)
+  10.7. The Lileath Network Adapter
+  10.8. The Hoeth Drive Interface
+  10.9. CHARM Serial Bus Devices (*)
+  10.10. ROM
+  10.11. CPU
+  10.12. Lithrai Real-Time Clock
+  10.13. Ellinill Random Number Generator
+
+(*) Unfinished or incomplete specification
+
+==========
+1. GENERAL
+==========
+
+CHASM (Container for Hybrid-Architecture Simulated Microkernels) is a register-based machine designed to function as a VM for the LETHE hobbyist operating system project. It succeeds an earlier design called CHARM (Compact High-Level Architecture Register Machine) which never got off the drawing board. CHASM's goals are to be:
+
+ - easy to target as a compiler backend
+ - plausible to implement in FPGA
+ - built on a decent, semi-modern hardware feature set
+ - not idiosyncratic: easy to port software to, and from
+ - avoidant of any backward compatibility that might lead to design complications
+ - thoroughly big-endian
+ - based entirely on 64-bit registers and a 64-bit memory space
+
+CHASM is implemented using C++ and SDL3 under MinGW, and should be broadly portable.
+
+The CHASM CPU parses 16-bit instructions, some of which may have a 'trailer' (additional words) for addresses and literals. The longest total instruction length is 80 bits, or 5 words.
+
+The CHASM environment provides memory mapping, paging, and ring-based interrupt restrictions, into a 64-bit memory space.
+
+
+1.1. To Do
+----------
+
+The CHASM specification is not yet complete. The following features may be added in the future:
+
+ - Complete specification of the DRAKIRA vector processor
+ - Specification of serial bus devices (CHARM)
+ - CPU instructions for partial loads (with offsets)
+ - CPU instructions for orthogonalizing LISP CONS operations (CHASMv2)
+ - More complete firmware description
+
+Instructions marked with #NEW# indicate the emulator has not yet been updated to recognize them, or that the format has changed such that the current implementation is incompatible.
+ 
+
+1.2. CHASM Versions
+-------------------
+
+ - Text not marked with CHASMv### is part of the baseline CHASM specification.
+ - CHASMv2 adds support for binary-coded decimal (BCD) and LISP CONS datatypes.
+
+============
+2. REGISTERS
+============
+
+CHASM exposes the following registers to the programmer. All of them are 64 bits in size.
+
+Number	Name	Description
+0000	a		general-purpose data register
+0001    b		general-purpose data register
+0010    c		general-purpose data register
+0011    d		general-purpose data register
+0100    e		general-purpose data register
+0101    f		general-purpose data register
+0110    g		general-purpose data register
+0111    h		general-purpose data register
+0000	a.d		CHASMv2 cons decrement register
+0001    b.d		CHASMv2 cons decrement register
+0010    c.d		CHASMv2 cons decrement register
+0011    d.d		CHASMv2 cons decrement register
+0100    e.d		CHASMv2 cons decrement register
+0101    f.d		CHASMv2 cons decrement register
+0110    g.d		CHASMv2 cons decrement register
+0111    h.d		CHASMv2 cons decrement register
+1000	pc		program counter - indicates address of next instruction; uses memory mapping
+1001	ra		return address - stack pointer to register backup of code that triggered the current interrupt
+1010	sb		stack base - uses memory mapping
+1011	sp		stack pointer - uses memory mapping
+1100	db		heap base - uses memory mapping
+1101	cb		code base - uses memory mapping
+1110	pi		unused (formerly Pending Interrupt Information)
+1111	status	flags:
+					Bit		Mask					Name	Description
+					00		0x0000000000000001		C		Carry Flag
+					01		0x0000000000000002		L		Less-Than Flag
+					02		0x0000000000000004		E		Equality Flag
+					03		0x0000000000000008		G		Greater-Than Flag
+					04		0x0000000000000010		Z		Zero Flag
+					05		0x0000000000000020		S		Sign Flag
+					06		0x0000000000000040		n/a		unset on CMP
+					07		0x0000000000000080		n/a		unset on CMP
+					
+					0a-08	0x0000000000000700		R2-0	Ring (000-111)
+					0b		0x0000000000000800		M		Memory Map Enable
+					0c		0x0000000000001000		n/a		unused (formerly Interrupt Enable)
+					0d		0x0000000000002000		IP		Interrupt Pending - set to 1 when a masked interrupt occurs
+					0e		0x0000000000004000		H		Halt - this CPU stops
+					0f		0x0000000000008000		J		CPU jumped last instruction
+					
+					10-17	0x0000000000ff0000		CI		Current Interrupt (1-254)
+					
+					18		0x0000000001000000		RM0		Next IRET is Type D (see 5.5.)
+					19		0x0000000002000000		RM1		Next IRET is Type E (see 5.5.)
+					1a		0x0000000004000000		
+					1b		0x0000000008000000		
+					1c		0x0000000010000000		
+					1d		0x0000000020000000		
+					1e		0x0000000040000000		
+					1f		0x0000000080000000		
+					
+					20		0x0000000100000000		
+					21		0x0000000200000000		
+					22		0x0000000400000000		
+					23		0x0000000800000000		
+					24		0x0000001000000000		
+					25		0x0000002000000000		
+					26		0x0000004000000000		
+					27		0x0000008000000000		
+					
+					28		0x0000010000000000		
+					29		0x0000020000000000		
+					2a		0x0000040000000000		
+					2b		0x0000080000000000		
+					2c		0x0000100000000000		
+					2d		0x0000200000000000		
+					2e		0x0000400000000000		
+					2f		0x0000800000000000		
+					
+					30		0x0001000000000000		
+					31		0x0002000000000000		
+					32		0x0004000000000000		
+					33		0x0008000000000000		
+					34		0x0010000000000000		
+					35		0x0020000000000000		
+					36		0x0040000000000000		
+					37		0x0080000000000000		
+					
+					38		0x0100000000000000		
+					39		0x0200000000000000		
+					3a		0x0400000000000000		
+					3b		0x0800000000000000		
+					3c		0x1000000000000000		
+					3d		0x2000000000000000		
+					3e		0x4000000000000000		
+					3f		0x8000000000000000		
+
+Arithmetic instructions (those that start with hex digits 0x8 through 0xE) are limited to registers 'a' through 'h'. Data must be moved between registers with `copy` or `swap` to perform arithmetic operations on the contents of the other registers.
+
+Some operations that work on the higher registers cannot access 'status' at all, as many instructions will interpret an attempt to interact with this register as a request to load an immediate literal or perform some other special action. (These are typically not operations you'd want to use on the 'status' register, like interpret its contents as an address in memory.) These are marked with a capital R, S, or T in the instructions list. A lower-case r, s, or t accepts a reference to 'status'.
+
+In addition, CHASM has the following special-purpose registers, which are only used in special instructions:
+
+Name	Description
+MMR		Reference to current Memory Map Table (see 6.); set with `lmmt` instruction (see 3.4.)
+
+
+2.1. Data Formats
+-----------------
+
+All data in CHASM is big-endian, unless otherwise specified. Bits are numbered from the rightmost (least-significant) to the leftmost (most-significant), starting with zero. In the binary number 1111111111111101, the bit at index 1 has the value 0.
+
+Bitmap diagrams in this specification are generally written left-to-right, with the left side being earlier (bigger) than the right. Addresses universally indicate the word at which a data item starts, e.g. storing a 64-bit value at 0x1000 will cause it to take up the spaces 0x1000 through 0x1003, with its smallest 16 bits at 0x1003 and largest at 0x1000.
+
+
+2.1.1. Unsigned Integers
+
+The standard data format in CHASM is an unsigned 64-bit binary integer. It can contain any value from 0 to 18,446,744,073,709,551,615.
+
+Certain operations may also use 32-bit and 16-bit unsigned integers as a second operand.
+
+
+2.1.2. Signed Integers
+
+The signed datatype is a 64-bit binary integer using two's complement. The maximum value is 9,223,372,036,854,775,807 (0x7fffffffffffffff) and the minimum value is -9,223,372,036,854,775,808 (0x8000000000000000).
+
+Certain operations may also use 32-bit and 16-bit signed integers as a second operand. These are also stored in conventional two's complement.
+
+
+2.1.3. Bytes and Multi-Bytes
+
+A CHASM byte is 8 bits. Certain opcodes, like `int`, take immediate 8-bit values embedded directly into the instruction. Unless otherwise stated, any explicit mention of a byte refers to an unsigned binary integer.
+
+The multi-byte type is a vector of eight values of 8 bits each. They behave as independent unsigned integers, and obey saturation arithmetic (subtraction never produces a value below zero, addition never produces a value above 255.) Certain operations may also use 32-bit and 16-bit multi-byte values, in which case only the bottom portion of the register is affected.
+
+
+2.1.4. Floating Point Numbers
+
+The floating point type is a 64-bit binary (double-precision) IEEE 754 number. It is formatted as follows:
+
+	1 bit: is the number negative? (1 = yes)
+	11 bits: exponent + 1023 (1 = -1022)
+	52 bits: fraction
+
+See IEEE 754 for details about special cases.
+
+The DRAKIRA vector processor can natively operate on 32-bit single-precision binary floating point values.
+
+
+2.1.5. Binary-Coded Decimal
+
+A CHASMv2 binary-coded decimal value holds 16 digits, where hex nibble values above 0x9 are forbidden. This allows for positive values up to 9,999,999,999,999,999.
+
+The first (highest) digit may be set to values above 0x9, in which case it has the following special significance:
+
+Value	Consequence
+0xA		Number is negative; range is -0 to -999,999,999,999,999.
+0xB		Number is fixed-point with precision 2; range is 0.00 to 9,999,999,999,999.99
+0xC		Number is negative and fixed-point with precision 2; range is -0.00 to -9,999,999,999,999.99
+0xD		Positive and overflow
+0xE		Negative and overflow
+0xF		NaN (BCD opcode was used on non-BCD data)
+
+Certain operations may involve 32-bit and 16-bit BCD values, in which case they are expected to be positive, values and only affect the bottom portion of the register.
+
+
+2.1.6. CONS Addresses
+
+In CHASMv2, the 8 data registers (a-h) have shadow registers called a.d, b.d, c.d, etc. These are used with special load, store, put, and get operations (.o and .c) for more efficient processing of datatypes for programming languages in the Lisp family. The contents of .d registers are always assumed to be unsigned 64-bit integers (see 2.1.1.)
+
+
+2.1.7. Bitwise
+
+Bitwise operations work on each bit of a register independently, typically covering an entire 64-bit register. Certain operations may involve 32-bit and 16-bit values loaded as the second operand, in which case they only affect the bottom portion of the register.
+
+A bit index is a number from 0 to 63 encoded using 6 bits to represent the ordinal of a specific element of a 64-bit word. Bits are numbered from the rightmost (least-significant) to the leftmost (most-significant), starting with zero. In the binary number 1111111111111101, the bit at index 1 has the value 0.
+
+
+2.1.8. Drakira-Specific Datatypes
+
+The Drakira vector processor allows setting arbitrary data unit lengths for working with signed and unsigned integers, as well as balanced ternary, 32-bit floats, 64-bit complex numbers, and certain compound types. See 10.6.2. Drakira Data Formats for more information.
+
+
+
+===============
+3. INSTRUCTIONS
+===============
+
+CHASM software is written in the CHAS assembler.
+
+CHASM opcodes are 16 bits (2 bytes) in length. They may possibly followed by a literal value, which may be 16, 32, or 64 bits in length, resulting in a total instruction size of 32, 48, or 80 bits (8, 12, or 20 bytes). The size of the literal is determined by the specific opcode, often (though not always) through a scalar value embedded in the third-leftmost (second-rightmost) nibble. Certain opcodes embed literals (called 'immediates' or 'immediate literals') inside themselves; literals that follow the opcode are called 'trailers' or 'trailing literals.'
+
+The leftmost hex digit (group of four bits) of an opcode is called its 'major', and usually determines the category of an instruction. The second-leftmost group is the 'minor', and often determines the specific instruction to perform. The second-rightmost group is the S group, and typically contains a description of the second operand, if one exists. The rightmost group is the R group, and typically contains a description of the first operand, if one exists.
+
+a: 64-bit literal (address)
+q: 64-bit literal (quad word)
+d: 32-bit literal (double word)
+w: 16-bit literal (word)
+b: 8-bit literal (byte)
+v: 6-bit literal (bit index)
+r, s, t: registers
+R, S, T: registers, but 1111 is reserved (usually means load a trailing literal)
+*: ignored
+?: any (for specifying groups of instructions; both possibilities defined)
+
+Bitmask				CHAS Mnemonic		Description
+0000 0000 **** ****	null				do nothing
+0000 0001 1000 RRRR	push R				push register r, or literal
+0000 0001 0100 RRRR	push.d R			push lower half of register r (double word), or literal
+0000 0001 0010 RRRR	push.w R			push lower quarter of register r (16-bit word), or literal
+0000 0010 1000 rrrr	pop r				pop register r
+0000 0010 0100 rrrr	pop.d r				pop lower half of register r (double word)
+0000 0010 0010 rrrr	pop.w r				pop lower quarter register r (16-bit word)
+0000 0001 0011 1111	push.a				push all registers to stack
+0000 0010 0011 1111	pop.a				pop all registers from stack
+0000 0001 0001 1111	push.h				push all data registers (a-h) to stack
+0000 0010 0001 1111	pop.h				pop all data registers (a-h) from stack
+0000 0011 **** **** 					unused
+0000 0100 **11 RRRR	load.a R			load all registers from (void*)r (or from literal address if R is 1111)
+0000 0100 **01 RRRR	load.h R			load all data registers (a-h) from (void*)r (or from literal address if R is 1111)
+0000 0101 **** **** 					unused
+0000 0110 **** ****						unused
+0000 0111 **** ****						unused
+0000 1000 **11 RRRR	store.a R			store all registers at (void*)r (or at literal address if R is 1111)
+0000 1000 **01 RRRR	store.h R			store all data registers (a-h) to (void*)r (or at literal address if R is 1111)
+0000 1001 **** **** 					unused
+0000 1010 **** ****						unused
+0000 1011 ssss rrrr cdr r, s			CHASMv2 get r.d and store in s.a (CONS shadow decrement register)
+										 -- if r is 'status', becomes `flip s` #NEW#
+0000 1011 ssss 1111 flip s				CHASMv2 swap value of s.a and s.d (CONS shadow decrement register) #NEW#
+0000 1100 ssss rrrr	copy r s			copy value from s into r
+0000 1101 ssss rrrr	unpack r s			CHASMv2 copy value from signed s into BCD r; converting into BCD; top 11 bits are lost. (16-char BCD = 53.15 bits)
+0000 1110 ssss rrrr	pack r s			CHASMv2 copy value from BCD s into signed r, converting bits from BCD, using up to 54 bits.
+0000 1111 ssss rrrr	swap r s			swap values of r and s registers
+
+0001 0000 ssss rrrr load.w r s			load 16 bits from (void*)s into r #NEW#
+0001 0001 ssss rrrr load.d r s			load 32 bits from (void*)s into r
+0001 0010 ssss rrrr load r s			load 64 bits from (void*)s into r
+0001 0011 0001 rrrr load.wi r <address>	load 64-bit literal as address and get 16 bits to put in r
+0001 0011 0010 rrrr load.di r <address>	load 64-bit literal as address and get 32 bits to put in r
+0001 0011 0100 rrrr load.i r <address>	load 64-bit literal as address and get 64 bits to put in r
+0001 0011 1001 rrrr set.w r <value>		load 16-bit literal into the bottom 16 bits of r
+0001 0011 1010 rrrr set.d r <value>		load 32-bit literal into the bottom 32 bits of r
+0001 0011 1100 rrrr set r <value>		load 64-bit literal into the bottom 64 bits of r
+0001 0100 ssss rrrr store.w r s			store 16 bits to (void*)s from r #NEW#
+0001 0101 ssss rrrr store.d r s			store 32 bits to (void*)s from r
+0001 0110 ssss rrrr store r s			store 64 bits to (void*)s from r
+0001 0111 0001 rrrr store.wi r <addr>	load 64-bit literal as address and store 16 bits from r
+0001 0111 0010 rrrr store.di r <addr>	load 64-bit literal as address and store 32 bits from r
+0001 0111 0100 rrrr store.i r <address>	load 64-bit literal as address and store 64 bits from r
+
+0001 1000 ???? ????						'rep' instructions (see 3.3.) #NEW# (moved)
+0001 11** **** ****						unused
+0001 101* **** ****						unused
+0001 1001 **** ****						unused
+
+0010 00vv vvvv rrrr	disable r v			clear bit v in r
+0010 01vv vvvv rrrr	enable r v			set bit v in r #NEW# (moved)
+0010 1??? ???? ????						debugging functions (see 3.5.)
+
+0011 TTTT ssss rrrr	update r s T		Store 64-bit value from (void*) s in r. If (void*)s is <= T, set to T. #NEW#
+
+0100 ???? ???? ????						positive jump instructions (see 3.2.)
+0101 TTTT ssss rrrr	bcopy r s T			copy T words from (void*)r to (void*)s (if T = 1111, read qword literal)
+0110 ???? ???? ????						negative jump instructions (see 3.2.)
+0111 TTTT ssss rrrr	bfill r s T			fill T words at (void*)s with contents of r (if T = 1111, read qword literal)
+
+1??? ???? ???? ????						arithmetic instructions (see 3.1.)
+1111 ???? ???? ???? 					kernel group (see 3.4.)
+
+
+3.1. Arithmetic Instructions
+----------------------------
+
+Opcodes in the range 0x8000 through 0xEFFF represent arithmetic instructions. These have the following structure:
+
+1AAA PPPQ IISS SRRR
+
+Where:
+
+	AAA is the datatype code,
+	PPP is the operation code,
+	Q is the reference flag,
+	II is the data size code,
+	SSS is the second register (a-h), or the alternate data size if II is 11, and
+	RRR is the first register (a-h).
+
+To form the complete mnemonic of an arithmetic instruction, use the format:
+
+	<datatype code><operation code>.[wd]?r?i?e?
+
+where [wd]? is one of "w", "d", or nothing; r? is "r" or nothing; i? is "i" or nothing; and e? is "e" or nothing.
+
+For example, add adds two unsigned integers that are in registers currently. add.dri loads the second argument from an immediate address, and only takes in a dword value at that address (32 bits).
+
+The "e" modifier is only used by one instruction, ccmp, and is mutually exclusive with "r" and "i".
+
+It is not usually necessary to type the "i" flag to the assembler; it will be inferred.
+
+
+3.1.1. Datatype Codes
+
+The datatypes are:
+
+Code	Abbreviation	Description
+000		n/a				unsigned integer
+001		s 				signed integer
+010		b 				multi-bytes
+011		f 				floating-point
+100		n/a 			bitwise
+101		c 				CHASMv2 cons (unsigned integer in .d partition)
+110		d 				CHASMv2 binary-coded decimal
+
+The datatype 111 is out of range, and signifies a jump instruction (see 3.2.)
+
+For a complete description of each datatype, see 2.1.
+
+
+3.1.2. Operation Codes
+
+The operation codes for most datatypes are:
+
+Code	Mnemonic	Description
+001		add			Add and store in first register
+011		sub 		Subtract and store in first register
+100		mul 		Multiply and store in first register
+110		div 		Divide and store in first register
+111		cmp 		Compare (set status bits C, L, E, G, Z, S)
+
+The cmp operation is not defined for the multi-bytes or bitwise datatypes.
+
+The unsigned integer datatype has the following additional operation codes:
+
+Code	Mnemonic	Description
+000		mod			Divide and store remainder in first register
+010		lsh			Left shift and store in first register
+101		rsh			Right shift and store in first register
+
+The signed integer datatype has the additional operation codes:
+
+Code	Mnemonic	Description
+000		mod			Divide and store remainder in first register
+010		lsh			Sign-extend left shift and store in first register
+101		rsh			Sign-extend right shift and store in first register
+
+The multi-bytes datatype has the additional operation code:
+
+Code	Mnemonic	Description
+000		mod			Divide and store remainder in first register
+
+The floating-point datatype has the following additional operation codes:
+
+Code	Mnemonic	Description
+010		pow			Raise to exponent and store in first register
+101		log			Take logarithm of first operand using second as base and store in first register
+
+The CHASMv2 cons datatype has the additional operation codes:
+
+000		cmp.e		Compare r.d with s.d
+010		lsh			Left shift and store in first register
+101		rsh			Right shift and store in first register
+
+The ccmp.[wdq] operations compare with s.a, so ccmp.[wdq]e is provided to allow direct comparison between decrement registers. It cannot be combined with any modifiers other than size.
+
+Finally, the bitwise datatype has entirely different operation codes and mnemonics:
+
+Code	Mnemonic	Description
+000		not			Negate second register; store in first register
+001		xor			XOR first register with second register; store in first register
+011		ror			Rotate right and store in first register
+100		and			AND and store in first register
+101		or			OR and store in first register
+110		rol			Rotate left and store in first register
+111		popcount	Count number of enabled bits in second register and store in first
+
+
+3.1.3. Reference Flag
+
+When the reference flag is 1, it indicates that the second operand (either the contents of the register s or the trailer literal) represents a 64-bit address in memory to load from.
+
+If a trailer is also used, then the trailer is assumed to be 64-bit, and the size (as specified by the alternate data size code, see 3.1.5.) is parsed as the size of the data item in memory instead.
+
+
+3.1.4. Data Size Codes
+
+Code	Description
+00		Use 1 word from second-operand source (16 bits)
+01		Use double word from second-operand source (32 bits)
+10		Use quad word from second-operand source (64 bits)
+11		Load trailing immediate (use alternate data size code, see 3.1.5.)
+
+
+3.1.5. Alternate Data Size Codes
+
+When the data size code is 11, the CPU expects a trailing immediate to follow the instruction word.
+
+If the reference flag is 1, the trailing immediate is assumed to be a 64-bit address pointing to the second operand's location in main memory. The value of the SSS field is used to determine how many words to read from that destination.
+
+If the reference flag is 0, the trailing immediate's size (1, 2, or 4 words) is determined by parsing the value of the SSS field.
+
+SSS value	Word Count
+001			Single (16 bits)
+010			Double (32 bits)
+100			Quadruple (64 bits)
+
+
+3.1.6. Complete List of Arithmetic Instructions
+
+1000 0000 00ss srrr mod.w r s
+1000 0000 01ss srrr mod.d r s
+1000 0000 10ss srrr mod r s
+1000 0001 00ss srrr mod.wr r s
+1000 0001 01ss srrr mod.dr r s
+1000 0001 10ss srrr mod.r r s
+1000 0000 1100 1rrr mod.wi r <literal>
+1000 0000 1101 0rrr mod.di r <literal>
+1000 0000 1110 0rrr mod.i r <literal>
+1000 0001 1100 1rrr mod.wri r <address>
+1000 0001 1101 0rrr mod.dri r <address>
+1000 0001 1110 0rrr mod.ri r <address>
+1000 0010 00ss srrr add.w r s
+1000 0010 01ss srrr add.d r s
+1000 0010 10ss srrr add r s
+1000 0011 00ss srrr add.wr r s
+1000 0011 01ss srrr add.dr r s
+1000 0011 10ss srrr add.r r s
+1000 0010 1100 1rrr add.wi r <literal>
+1000 0010 1101 0rrr add.di r <literal>
+1000 0010 1110 0rrr add.i r <literal>
+1000 0011 1100 1rrr add.wri r <address>
+1000 0011 1101 0rrr add.dri r <address>
+1000 0011 1110 0rrr add.ri r <address>
+1000 0100 00ss srrr lsh.w r s
+1000 0100 01ss srrr lsh.d r s
+1000 0100 10ss srrr lsh r s
+1000 0101 00ss srrr lsh.wr r s
+1000 0101 01ss srrr lsh.dr r s
+1000 0101 10ss srrr lsh.r r s
+1000 0100 1100 1rrr lsh.wi r <literal>
+1000 0100 1101 0rrr lsh.di r <literal>
+1000 0100 1110 0rrr lsh.i r <literal>
+1000 0101 1100 1rrr lsh.wri r <address>
+1000 0101 1101 0rrr lsh.dri r <address>
+1000 0101 1110 0rrr lsh.ri r <address>
+1000 0110 00ss srrr sub.w r s
+1000 0110 01ss srrr sub.d r s
+1000 0110 10ss srrr sub r s
+1000 0111 00ss srrr sub.wr r s
+1000 0111 01ss srrr sub.dr r s
+1000 0111 10ss srrr sub.r r s
+1000 0110 1100 1rrr sub.wi r <literal>
+1000 0110 1101 0rrr sub.di r <literal>
+1000 0110 1110 0rrr sub.i r <literal>
+1000 0111 1100 1rrr sub.wri r <address>
+1000 0111 1101 0rrr sub.dri r <address>
+1000 0111 1110 0rrr sub.ri r <address>
+1000 1000 00ss srrr mul.w r s
+1000 1000 01ss srrr mul.d r s
+1000 1000 10ss srrr mul r s
+1000 1001 00ss srrr mul.wr r s
+1000 1001 01ss srrr mul.dr r s
+1000 1001 10ss srrr mul.r r s
+1000 1000 1100 1rrr mul.wi r <literal>
+1000 1000 1101 0rrr mul.di r <literal>
+1000 1000 1110 0rrr mul.i r <literal>
+1000 1001 1100 1rrr mul.wri r <address>
+1000 1001 1101 0rrr mul.dri r <address>
+1000 1001 1110 0rrr mul.ri r <address>
+1000 1010 00ss srrr rsh.w r s
+1000 1010 01ss srrr rsh.d r s
+1000 1010 10ss srrr rsh r s
+1000 1011 00ss srrr rsh.wr r s
+1000 1011 01ss srrr rsh.dr r s
+1000 1011 10ss srrr rsh.r r s
+1000 1010 1100 1rrr rsh.wi r <literal>
+1000 1010 1101 0rrr rsh.di r <literal>
+1000 1010 1110 0rrr rsh.i r <literal>
+1000 1011 1100 1rrr rsh.wri r <address>
+1000 1011 1101 0rrr rsh.dri r <address>
+1000 1011 1110 0rrr rsh.ri r <address>
+1000 1100 00ss srrr div.w r s
+1000 1100 01ss srrr div.d r s
+1000 1100 10ss srrr div r s
+1000 1101 00ss srrr div.wr r s
+1000 1101 01ss srrr div.dr r s
+1000 1101 10ss srrr div.r r s
+1000 1100 1100 1rrr div.wi r <literal>
+1000 1100 1101 0rrr div.di r <literal>
+1000 1100 1110 0rrr div.i r <literal>
+1000 1101 1100 1rrr div.wri r <address>
+1000 1101 1101 0rrr div.dri r <address>
+1000 1101 1110 0rrr div.ri r <address>
+1000 1110 00ss srrr cmp.w r s
+1000 1110 01ss srrr cmp.d r s
+1000 1110 10ss srrr cmp r s
+1000 1111 00ss srrr cmp.wr r s
+1000 1111 01ss srrr cmp.dr r s
+1000 1111 10ss srrr cmp.r r s
+1000 1110 1100 1rrr cmp.wi r <literal>
+1000 1110 1101 0rrr cmp.di r <literal>
+1000 1110 1110 0rrr cmp.i r <literal>
+1000 1111 1100 1rrr cmp.wri r <address>
+1000 1111 1101 0rrr cmp.dri r <address>
+1000 1111 1110 0rrr cmp.ri r <address>
+
+1001 0000 00ss srrr smod.w r s
+1001 0000 01ss srrr smod.d r s
+1001 0000 10ss srrr smod r s
+1001 0001 00ss srrr smod.wr r s
+1001 0001 01ss srrr smod.dr r s
+1001 0001 10ss srrr smod.r r s
+1001 0000 1100 1rrr smod.wi r <literal>
+1001 0000 1101 0rrr smod.di r <literal>
+1001 0000 1110 0rrr smod.i r <literal>
+1001 0001 1100 1rrr smod.wri r <address>
+1001 0001 1101 0rrr smod.dri r <address>
+1001 0001 1110 0rrr smod.ri r <address>
+1001 0010 00ss srrr sadd.w r s
+1001 0010 01ss srrr sadd.d r s
+1001 0010 10ss srrr sadd r s
+1001 0011 00ss srrr sadd.wr r s
+1001 0011 01ss srrr sadd.dr r s
+1001 0011 10ss srrr sadd.r r s
+1001 0010 1100 1rrr sadd.wi r <literal>
+1001 0010 1101 0rrr sadd.di r <literal>
+1001 0010 1110 0rrr sadd.i r <literal>
+1001 0011 1100 1rrr sadd.wri r <address>
+1001 0011 1101 0rrr sadd.dri r <address>
+1001 0011 1110 0rrr sadd.ri r <address>
+1001 0100 00ss srrr slsh.w r s
+1001 0100 01ss srrr slsh.d r s
+1001 0100 10ss srrr slsh r s
+1001 0101 00ss srrr slsh.wr r s
+1001 0101 01ss srrr slsh.dr r s
+1001 0101 10ss srrr slsh.r r s
+1001 0100 1100 1rrr slsh.wi r <literal>
+1001 0100 1101 0rrr slsh.di r <literal>
+1001 0100 1110 0rrr slsh.i r <literal>
+1001 0101 1100 1rrr slsh.wri r <address>
+1001 0101 1101 0rrr slsh.dri r <address>
+1001 0101 1110 0rrr slsh.ri r <address>
+1001 0110 00ss srrr ssub.w r s
+1001 0110 01ss srrr ssub.d r s
+1001 0110 10ss srrr ssub r s
+1001 0111 00ss srrr ssub.wr r s
+1001 0111 01ss srrr ssub.dr r s
+1001 0111 10ss srrr ssub.r r s
+1001 0110 1100 1rrr ssub.wi r <literal>
+1001 0110 1101 0rrr ssub.di r <literal>
+1001 0110 1110 0rrr ssub.i r <literal>
+1001 0111 1100 1rrr ssub.wri r <address>
+1001 0111 1101 0rrr ssub.dri r <address>
+1001 0111 1110 0rrr ssub.ri r <address>
+1001 1000 00ss srrr smul.w r s
+1001 1000 01ss srrr smul.d r s
+1001 1000 10ss srrr smul r s
+1001 1001 00ss srrr smul.wr r s
+1001 1001 01ss srrr smul.dr r s
+1001 1001 10ss srrr smul.r r s
+1001 1000 1100 1rrr smul.wi r <literal>
+1001 1000 1101 0rrr smul.di r <literal>
+1001 1000 1110 0rrr smul.i r <literal>
+1001 1001 1100 1rrr smul.wri r <address>
+1001 1001 1101 0rrr smul.dri r <address>
+1001 1001 1110 0rrr smul.ri r <address>
+1001 1010 00ss srrr srsh.w r s
+1001 1010 01ss srrr srsh.d r s
+1001 1010 10ss srrr srsh r s
+1001 1011 00ss srrr srsh.wr r s
+1001 1011 01ss srrr srsh.dr r s
+1001 1011 10ss srrr srsh.r r s
+1001 1010 1100 1rrr srsh.wi r <literal>
+1001 1010 1101 0rrr srsh.di r <literal>
+1001 1010 1110 0rrr srsh.i r <literal>
+1001 1011 1100 1rrr srsh.wri r <address>
+1001 1011 1101 0rrr srsh.dri r <address>
+1001 1011 1110 0rrr srsh.ri r <address>
+1001 1100 00ss srrr sdiv.w r s
+1001 1100 01ss srrr sdiv.d r s
+1001 1100 10ss srrr sdiv r s
+1001 1101 00ss srrr sdiv.wr r s
+1001 1101 01ss srrr sdiv.dr r s
+1001 1101 10ss srrr sdiv.r r s
+1001 1100 1100 1rrr sdiv.wi r <literal>
+1001 1100 1101 0rrr sdiv.di r <literal>
+1001 1100 1110 0rrr sdiv.i r <literal>
+1001 1101 1100 1rrr sdiv.wri r <address>
+1001 1101 1101 0rrr sdiv.dri r <address>
+1001 1101 1110 0rrr sdiv.ri r <address>
+1001 1110 00ss srrr scmp.w r s
+1001 1110 01ss srrr scmp.d r s
+1001 1110 10ss srrr scmp r s
+1001 1111 00ss srrr scmp.wr r s
+1001 1111 01ss srrr scmp.dr r s
+1001 1111 10ss srrr scmp.r r s
+1001 1110 1100 1rrr scmp.wi r <literal>
+1001 1110 1101 0rrr scmp.di r <literal>
+1001 1110 1110 0rrr scmp.i r <literal>
+1001 1111 1100 1rrr scmp.wri r <address>
+1001 1111 1101 0rrr scmp.dri r <address>
+1001 1111 1110 0rrr scmp.ri r <address>
+
+1010 0000 00ss srrr bmod.w r s
+1010 0000 01ss srrr bmod.d r s
+1010 0000 10ss srrr bmod r s
+1010 0001 00ss srrr bmod.wr r s
+1010 0001 01ss srrr bmod.dr r s
+1010 0001 10ss srrr bmod.r r s
+1010 0000 1100 1rrr bmod.wi r <literal>
+1010 0000 1101 0rrr bmod.di r <literal>
+1010 0000 1110 0rrr bmod.i r <literal>
+1010 0001 1100 1rrr bmod.wri r <address>
+1010 0001 1101 0rrr bmod.dri r <address>
+1010 0001 1110 0rrr bmod.ri r <address>
+1010 0010 00ss srrr badd.w r s
+1010 0010 01ss srrr badd.d r s
+1010 0010 10ss srrr badd r s
+1010 0011 00ss srrr badd.wr r s
+1010 0011 01ss srrr badd.dr r s
+1010 0011 10ss srrr badd.r r s
+1010 0010 1100 1rrr badd.wi r <literal>
+1010 0010 1101 0rrr badd.di r <literal>
+1010 0010 1110 0rrr badd.i r <literal>
+1010 0011 1100 1rrr badd.wri r <address>
+1010 0011 1101 0rrr badd.dri r <address>
+1010 0011 1110 0rrr badd.ri r <address>
+1010 0110 00ss srrr bsub.w r s
+1010 0110 01ss srrr bsub.d r s
+1010 0110 10ss srrr bsub r s
+1010 0111 00ss srrr bsub.wr r s
+1010 0111 01ss srrr bsub.dr r s
+1010 0111 10ss srrr bsub.r r s
+1010 0110 1100 1rrr bsub.wi r <literal>
+1010 0110 1101 0rrr bsub.di r <literal>
+1010 0110 1110 0rrr bsub.i r <literal>
+1010 0111 1100 1rrr bsub.wri r <address>
+1010 0111 1101 0rrr bsub.dri r <address>
+1010 0111 1110 0rrr bsub.ri r <address>
+1010 1000 00ss srrr bmul.w r s
+1010 1000 01ss srrr bmul.d r s
+1010 1000 10ss srrr bmul r s
+1010 1001 00ss srrr bmul.wr r s
+1010 1001 01ss srrr bmul.dr r s
+1010 1001 10ss srrr bmul.r r s
+1010 1000 1100 1rrr bmul.wi r <literal>
+1010 1000 1101 0rrr bmul.di r <literal>
+1010 1000 1110 0rrr bmul.i r <literal>
+1010 1001 1100 1rrr bmul.wri r <address>
+1010 1001 1101 0rrr bmul.dri r <address>
+1010 1001 1110 0rrr bmul.ri r <address>
+1010 1100 00ss srrr bdiv.w r s
+1010 1100 01ss srrr bdiv.d r s
+1010 1100 10ss srrr bdiv r s
+1010 1101 00ss srrr bdiv.wr r s
+1010 1101 01ss srrr bdiv.dr r s
+1010 1101 10ss srrr bdiv.r r s
+1010 1100 1100 1rrr bdiv.wi r <literal>
+1010 1100 1101 0rrr bdiv.di r <literal>
+1010 1100 1110 0rrr bdiv.i r <literal>
+1010 1101 1100 1rrr bdiv.wri r <address>
+1010 1101 1101 0rrr bdiv.dri r <address>
+1010 1101 1110 0rrr bdiv.ri r <address>
+
+1011 0010 00ss srrr fadd.w r s
+1011 0010 01ss srrr fadd.d r s
+1011 0010 10ss srrr fadd r s
+1011 0011 00ss srrr fadd.wr r s
+1011 0011 01ss srrr fadd.dr r s
+1011 0011 10ss srrr fadd.r r s
+1011 0010 1100 1rrr fadd.wi r <literal>
+1011 0010 1101 0rrr fadd.di r <literal>
+1011 0010 1110 0rrr fadd.i r <literal>
+1011 0011 1100 1rrr fadd.wri r <address>
+1011 0011 1101 0rrr fadd.dri r <address>
+1011 0011 1110 0rrr fadd.ri r <address>
+1011 0100 00ss srrr fpow.w r s
+1011 0100 01ss srrr fpow.d r s
+1011 0100 10ss srrr fpow r s
+1011 0101 00ss srrr fpow.wr r s
+1011 0101 01ss srrr fpow.dr r s
+1011 0101 10ss srrr fpow.r r s
+1011 0100 1100 1rrr fpow.wi r <literal>
+1011 0100 1101 0rrr fpow.di r <literal>
+1011 0100 1110 0rrr fpow.i r <literal>
+1011 0101 1100 1rrr fpow.wri r <address>
+1011 0101 1101 0rrr fpow.dri r <address>
+1011 0101 1110 0rrr fpow.ri r <address>
+1011 0110 00ss srrr fsub.w r s
+1011 0110 01ss srrr fsub.d r s
+1011 0110 10ss srrr fsub r s
+1011 0111 00ss srrr fsub.wr r s
+1011 0111 01ss srrr fsub.dr r s
+1011 0111 10ss srrr fsub.r r s
+1011 0110 1100 1rrr fsub.wi r <literal>
+1011 0110 1101 0rrr fsub.di r <literal>
+1011 0110 1110 0rrr fsub.i r <literal>
+1011 0111 1100 1rrr fsub.wri r <address>
+1011 0111 1101 0rrr fsub.dri r <address>
+1011 0111 1110 0rrr fsub.ri r <address>
+1011 1000 00ss srrr fmul.w r s
+1011 1000 01ss srrr fmul.d r s
+1011 1000 10ss srrr fmul r s
+1011 1001 00ss srrr fmul.wr r s
+1011 1001 01ss srrr fmul.dr r s
+1011 1001 10ss srrr fmul.r r s
+1011 1000 1100 1rrr fmul.wi r <literal>
+1011 1000 1101 0rrr fmul.di r <literal>
+1011 1000 1110 0rrr fmul.i r <literal>
+1011 1001 1100 1rrr fmul.wri r <address>
+1011 1001 1101 0rrr fmul.dri r <address>
+1011 1001 1110 0rrr fmul.ri r <address>
+1011 1010 00ss srrr flog.w r s
+1011 1010 01ss srrr flog.d r s
+1011 1010 10ss srrr flog r s
+1011 1011 00ss srrr flog.wr r s
+1011 1011 01ss srrr flog.dr r s
+1011 1011 10ss srrr flog.r r s
+1011 1010 1100 1rrr flog.wi r <literal>
+1011 1010 1101 0rrr flog.di r <literal>
+1011 1010 1110 0rrr flog.i r <literal>
+1011 1011 1100 1rrr flog.wri r <address>
+1011 1011 1101 0rrr flog.dri r <address>
+1011 1011 1110 0rrr flog.ri r <address>
+1011 1100 00ss srrr fdiv.w r s
+1011 1100 01ss srrr fdiv.d r s
+1011 1100 10ss srrr fdiv r s
+1011 1101 00ss srrr fdiv.wr r s
+1011 1101 01ss srrr fdiv.dr r s
+1011 1101 10ss srrr fdiv.r r s
+1011 1100 1100 1rrr fdiv.wi r <literal>
+1011 1100 1101 0rrr fdiv.di r <literal>
+1011 1100 1110 0rrr fdiv.i r <literal>
+1011 1101 1100 1rrr fdiv.wri r <address>
+1011 1101 1101 0rrr fdiv.dri r <address>
+1011 1101 1110 0rrr fdiv.ri r <address>
+1011 1110 00ss srrr fcmp.w r s
+1011 1110 01ss srrr fcmp.d r s
+1011 1110 10ss srrr fcmp r s
+1011 1111 00ss srrr fcmp.wr r s
+1011 1111 01ss srrr fcmp.dr r s
+1011 1111 10ss srrr fcmp.r r s
+1011 1110 1100 1rrr fcmp.wi r <literal>
+1011 1110 1101 0rrr fcmp.di r <literal>
+1011 1110 1110 0rrr fcmp.i r <literal>
+1011 1111 1100 1rrr fcmp.wri r <address>
+1011 1111 1101 0rrr fcmp.dri r <address>
+1011 1111 1110 0rrr fcmp.ri r <address>
+
+1100 0000 00ss srrr not.w r s
+1100 0000 01ss srrr not.d r s
+1100 0000 10ss srrr not r s
+1100 0001 00ss srrr not.wr r s
+1100 0001 01ss srrr not.dr r s
+1100 0001 10ss srrr not.r r s
+1100 0000 1100 1rrr not.wi r <literal>
+1100 0000 1101 0rrr not.di r <literal>
+1100 0000 1110 0rrr not.i r <literal>
+1100 0001 1100 1rrr not.wri r <address>
+1100 0001 1101 0rrr not.dri r <address>
+1100 0001 1110 0rrr not.ri r <address>
+1100 0010 00ss srrr xor.w r s
+1100 0010 01ss srrr xor.d r s
+1100 0010 10ss srrr xor r s
+1100 0011 00ss srrr xor.wr r s
+1100 0011 01ss srrr xor.dr r s
+1100 0011 10ss srrr xor.r r s
+1100 0010 1100 1rrr xor.wi r <literal>
+1100 0010 1101 0rrr xor.di r <literal>
+1100 0010 1110 0rrr xor.i r <literal>
+1100 0011 1100 1rrr xor.wri r <address>
+1100 0011 1101 0rrr xor.dri r <address>
+1100 0011 1110 0rrr xor.ri r <address>
+1100 0110 00ss srrr ror.w r s
+1100 0110 01ss srrr ror.d r s
+1100 0110 10ss srrr ror r s
+1100 0111 00ss srrr ror.wr r s
+1100 0111 01ss srrr ror.dr r s
+1100 0111 10ss srrr ror.r r s
+1100 0110 1100 1rrr ror.wi r <literal>
+1100 0110 1101 0rrr ror.di r <literal>
+1100 0110 1110 0rrr ror.i r <literal>
+1100 0111 1100 1rrr ror.wri r <address>
+1100 0111 1101 0rrr ror.dri r <address>
+1100 0111 1110 0rrr ror.ri r <address>
+1100 1000 00ss srrr and.w r s
+1100 1000 01ss srrr and.d r s
+1100 1000 10ss srrr and r s
+1100 1001 00ss srrr and.wr r s
+1100 1001 01ss srrr and.dr r s
+1100 1001 10ss srrr and.r r s
+1100 1000 1100 1rrr and.wi r <literal>
+1100 1000 1101 0rrr and.di r <literal>
+1100 1000 1110 0rrr and.i r <literal>
+1100 1001 1100 1rrr and.wri r <address>
+1100 1001 1101 0rrr and.dri r <address>
+1100 1001 1110 0rrr and.ri r <address>
+1100 1010 00ss srrr or.w r s
+1100 1010 01ss srrr or.d r s
+1100 1010 10ss srrr or r s
+1100 1011 00ss srrr or.wr r s
+1100 1011 01ss srrr or.dr r s
+1100 1011 10ss srrr or.r r s
+1100 1010 1100 1rrr or.wi r <literal>
+1100 1010 1101 0rrr or.di r <literal>
+1100 1010 1110 0rrr or.i r <literal>
+1100 1011 1100 1rrr or.wri r <address>
+1100 1011 1101 0rrr or.dri r <address>
+1100 1011 1110 0rrr or.ri r <address>
+1100 1100 00ss srrr rol.w r s
+1100 1100 01ss srrr rol.d r s
+1100 1100 10ss srrr rol r s
+1100 1101 00ss srrr rol.wr r s
+1100 1101 01ss srrr rol.dr r s
+1100 1101 10ss srrr rol.r r s
+1100 1100 1100 1rrr rol.wi r <literal>
+1100 1100 1101 0rrr rol.di r <literal>
+1100 1100 1110 0rrr rol.i r <literal>
+1100 1101 1100 1rrr rol.wri r <address>
+1100 1101 1101 0rrr rol.dri r <address>
+1100 1101 1110 0rrr rol.ri r <address>
+1100 1110 00ss srrr popcount.w r s
+1100 1110 01ss srrr popcount.d r s
+1100 1110 10ss srrr popcount r s
+1100 1111 00ss srrr popcount.wr r s
+1100 1111 01ss srrr popcount.dr r s
+1100 1111 10ss srrr popcount.r r s
+1100 1110 1100 1rrr popcount.wi r <literal>
+1100 1110 1101 0rrr popcount.di r <literal>
+1100 1110 1110 0rrr popcount.i r <literal>
+1100 1111 1100 1rrr popcount.wri r <address>
+1100 1111 1101 0rrr popcount.dri r <address>
+1100 1111 1110 0rrr popcount.ri r <address>
+
+1101 0010 00ss srrr cadd.w r s
+1101 0010 01ss srrr cadd.d r s
+1101 0010 10ss srrr cadd r s
+1101 0011 00ss srrr cadd.wr r s
+1101 0011 01ss srrr cadd.dr r s
+1101 0011 10ss srrr cadd.r r s
+1101 0010 1100 1rrr cadd.wi r <literal>
+1101 0010 1101 0rrr cadd.di r <literal>
+1101 0010 1110 0rrr cadd.i r <literal>
+1101 0011 1100 1rrr cadd.wri r <address>
+1101 0011 1101 0rrr cadd.dri r <address>
+1101 0011 1110 0rrr cadd.ri r <address>
+1101 0100 00ss srrr clsh.w r s
+1101 0100 01ss srrr clsh.d r s
+1101 0100 10ss srrr clsh r s
+1101 0101 00ss srrr clsh.wr r s
+1101 0101 01ss srrr clsh.dr r s
+1101 0101 10ss srrr clsh.r r s
+1101 0100 1100 1rrr clsh.wi r <literal>
+1101 0100 1101 0rrr clsh.di r <literal>
+1101 0100 1110 0rrr clsh.i r <literal>
+1101 0101 1100 1rrr clsh.wri r <address>
+1101 0101 1101 0rrr clsh.dri r <address>
+1101 0101 1110 0rrr clsh.ri r <address>
+1101 0110 00ss srrr csub.w r s
+1101 0110 01ss srrr csub.d r s
+1101 0110 10ss srrr csub r s
+1101 0111 00ss srrr csub.wr r s
+1101 0111 01ss srrr csub.dr r s
+1101 0111 10ss srrr csub.r r s
+1101 0110 1100 1rrr csub.wi r <literal>
+1101 0110 1101 0rrr csub.di r <literal>
+1101 0110 1110 0rrr csub.i r <literal>
+1101 0111 1100 1rrr csub.wri r <address>
+1101 0111 1101 0rrr csub.dri r <address>
+1101 0111 1110 0rrr csub.ri r <address>
+1101 1000 00ss srrr cmul.w r s
+1101 1000 01ss srrr cmul.d r s
+1101 1000 10ss srrr cmul r s
+1101 1001 00ss srrr cmul.wr r s
+1101 1001 01ss srrr cmul.dr r s
+1101 1001 10ss srrr cmul.r r s
+1101 1000 1100 1rrr cmul.wi r <literal>
+1101 1000 1101 0rrr cmul.di r <literal>
+1101 1000 1110 0rrr cmul.i r <literal>
+1101 1001 1100 1rrr cmul.wri r <address>
+1101 1001 1101 0rrr cmul.dri r <address>
+1101 1001 1110 0rrr cmul.ri r <address>
+1101 1010 00ss srrr crsh.w r s
+1101 1010 01ss srrr crsh.d r s
+1101 1010 10ss srrr crsh r s
+1101 1011 00ss srrr crsh.wr r s
+1101 1011 01ss srrr crsh.dr r s
+1101 1011 10ss srrr crsh.r r s
+1101 1010 1100 1rrr crsh.wi r <literal>
+1101 1010 1101 0rrr crsh.di r <literal>
+1101 1010 1110 0rrr crsh.i r <literal>
+1101 1011 1100 1rrr crsh.wri r <address>
+1101 1011 1101 0rrr crsh.dri r <address>
+1101 1011 1110 0rrr crsh.ri r <address>
+1101 1100 00ss srrr cdiv.w r s
+1101 1100 01ss srrr cdiv.d r s
+1101 1100 10ss srrr cdiv r s
+1101 1101 00ss srrr cdiv.wr r s
+1101 1101 01ss srrr cdiv.dr r s
+1101 1101 10ss srrr cdiv.r r s
+1101 1100 1100 1rrr cdiv.wi r <literal>
+1101 1100 1101 0rrr cdiv.di r <literal>
+1101 1100 1110 0rrr cdiv.i r <literal>
+1101 1101 1100 1rrr cdiv.wri r <address>
+1101 1101 1101 0rrr cdiv.dri r <address>
+1101 1101 1110 0rrr cdiv.ri r <address>
+1101 1110 00ss srrr ccmp.w r s
+1101 1110 01ss srrr ccmp.d r s
+1101 1110 10ss srrr ccmp r s
+1101 1111 00ss srrr ccmp.wr r s
+1101 1111 01ss srrr ccmp.dr r s
+1101 1111 10ss srrr ccmp.r r s
+1101 1110 1100 1rrr ccmp.wi r <literal>
+1101 1110 1101 0rrr ccmp.di r <literal>
+1101 1110 1110 0rrr ccmp.i r <literal>
+1101 1111 1100 1rrr ccmp.wri r <address>
+1101 1111 1101 0rrr ccmp.dri r <address>
+1101 1111 1110 0rrr ccmp.ri r <address>
+1101 0000 00ss srrr ccmp.we r s
+1101 0000 01ss srrr ccmp.de r s
+1101 0000 10ss srrr ccmp.e r s
+
+1110 0010 00ss srrr dadd.w r s
+1110 0010 01ss srrr dadd.d r s
+1110 0010 10ss srrr dadd r s
+1110 0011 00ss srrr dadd.wr r s
+1110 0011 01ss srrr dadd.dr r s
+1110 0011 10ss srrr dadd.r r s
+1110 0010 1100 1rrr dadd.wi r <literal>
+1110 0010 1101 0rrr dadd.di r <literal>
+1110 0010 1110 0rrr dadd.i r <literal>
+1110 0011 1100 1rrr dadd.wri r <address>
+1110 0011 1101 0rrr dadd.dri r <address>
+1110 0011 1110 0rrr dadd.ri r <address>
+1110 0110 00ss srrr dsub.w r s
+1110 0110 01ss srrr dsub.d r s
+1110 0110 10ss srrr dsub r s
+1110 0111 00ss srrr dsub.wr r s
+1110 0111 01ss srrr dsub.dr r s
+1110 0111 10ss srrr dsub.r r s
+1110 0110 1100 1rrr dsub.wi r <literal>
+1110 0110 1101 0rrr dsub.di r <literal>
+1110 0110 1110 0rrr dsub.i r <literal>
+1110 0111 1100 1rrr dsub.wri r <address>
+1110 0111 1101 0rrr dsub.dri r <address>
+1110 0111 1110 0rrr dsub.ri r <address>
+1110 1000 00ss srrr dmul.w r s
+1110 1000 01ss srrr dmul.d r s
+1110 1000 10ss srrr dmul r s
+1110 1001 00ss srrr dmul.wr r s
+1110 1001 01ss srrr dmul.dr r s
+1110 1001 10ss srrr dmul.r r s
+1110 1000 1100 1rrr dmul.wi r <literal>
+1110 1000 1101 0rrr dmul.di r <literal>
+1110 1000 1110 0rrr dmul.i r <literal>
+1110 1001 1100 1rrr dmul.wri r <address>
+1110 1001 1101 0rrr dmul.dri r <address>
+1110 1001 1110 0rrr dmul.ri r <address>
+1110 1100 00ss srrr ddiv.w r s
+1110 1100 01ss srrr ddiv.d r s
+1110 1100 10ss srrr ddiv r s
+1110 1101 00ss srrr ddiv.wr r s
+1110 1101 01ss srrr ddiv.dr r s
+1110 1101 10ss srrr ddiv.r r s
+1110 1100 1100 1rrr ddiv.wi r <literal>
+1110 1100 1101 0rrr ddiv.di r <literal>
+1110 1100 1110 0rrr ddiv.i r <literal>
+1110 1101 1100 1rrr ddiv.wri r <address>
+1110 1101 1101 0rrr ddiv.dri r <address>
+1110 1101 1110 0rrr ddiv.ri r <address>
+1110 1110 00ss srrr dcmp.w r s
+1110 1110 01ss srrr dcmp.d r s
+1110 1110 10ss srrr dcmp r s
+1110 1111 00ss srrr dcmp.wr r s
+1110 1111 01ss srrr dcmp.dr r s
+1110 1111 10ss srrr dcmp.r r s
+1110 1110 1100 1rrr dcmp.wi r <literal>
+1110 1110 1101 0rrr dcmp.di r <literal>
+1110 1110 1110 0rrr dcmp.i r <literal>
+1110 1111 1100 1rrr dcmp.wri r <address>
+1110 1111 1101 0rrr dcmp.dri r <address>
+1110 1111 1110 0rrr dcmp.ri r <address>
+
+
+3.2. Jump Instructions
+----------------------
+
+01?0........RRRR
+					run AND against bottom 8 bits of status register, and jump to 64-bit address. If R is 1111, read address as subsequent q, otherwise read address from register R
+					? = 0: jump only if at least one bit is turned on
+					? = 1: jump only if all bits are turned off
+					
+					........ = bitmask to use against bottom 8 bits of status register
+
+0110 0000 0000 RRRR	jmp	q/R				jump to address in register r (unconditional jump)
+0100 0000 0000 RRRR	jmp	q/R				do nothing
+
+0110 0000 0100 RRRR	jne	q/R				jmp if E flag not set
+0100 0000 0001 RRRR	jc q/R				jmp if C flag set
+0110 0000 0001 RRRR	jnc q/R				jmp if C flag not set
+0100 0000 1100 RRRR	jge q/R				jmp if G or E flag set
+0100 0000 0100 RRRR	je q/R				jmp if E flag set
+0100 0000 0110 RRRR	jle q/R				jmp if L or E flag set
+0100 0000 1000 RRRR	jg q/R				jmp if G flag set
+0100 0000 0010 RRRR	jl q/R				jmp if L flag set
+0100 0001 0000 RRRR	jz q/R				jmp	if Z flag set
+0110 0001 0000 RRRR	jnz q/R				jmp	if Z flag not set
+0100 0010 0000 RRRR	js q/R				jmp if S flag set
+0110 0010 0000 RRRR	jns q/R				jmp if S flag not set
+
+Other values for ........ are possible but have no defined mnemonics.
+
+
+3.3. Repeat Operations
+----------------------
+
+The repeat family instructions cause the last instruction to be executed multiple times. The CPU uses hardware to perform these loops; they are not assembler directives. Literal values cannot be incremented; they must be in registers.
+
+0011 1000 0000 RRRR	rep.n R				repeat previous instruction R times
+0011 1000 0001 RRRR	rep.wr R			repeat R times, incrementing contents of 'r' register by 1
+0011 1000 0010 RRRR	rep.ws R			repeat R times, incrementing contents of 's' register by 1
+0011 1000 0011 RRRR	rep.wrs R			repeat R times, incrementing contents of 'r' and 's' registers by 1
+0011 1000 0101 RRRR	rep.dr R			repeat R times, incrementing contents of 'r' register by 2
+0011 1000 0110 RRRR	rep.ds R			repeat R times, incrementing contents of 's' register by 2
+0011 1000 0111 RRRR	rep.drs R			repeat R times, incrementing contents of 'r' and 's' registers by 2
+0011 1000 1001 RRRR	rep.qr R			repeat R times, incrementing contents of 'r' register by 4
+0011 1000 1010 RRRR	rep.qs R			repeat R times, incrementing contents of 's' register by 4
+0011 1000 1011 RRRR	rep.qrs R			repeat R times, incrementing contents of 'r' and 's' registers by 4
+
+
+3.4. Special Flow Control Operations
+------------------------------------
+
+1111 0000 bbbb bbbb	int b				call interrupt x (see 5.)
+										if b is 0, halt entire system (all CPUs)
+										if b is 255, call any pending interrupts 
+1111 0100 0000 0001	iret				return from interrupt
+										restore M flag (according to IAT entry for CI, see 5.) and jump to ra
+
+1111 0100 0001 RRRR lmmt R				load MMR from register R or trailer address (see 6.)
+										MMT is not active until the M flag is set
+										if the loaded address is 0 (null), the M flag is automatically disabled
+
+1111 0100 0000 0000	ret					pop pc, sb, sp
+1111 1000 0000 RRRR	call R				push sp, sb, pc, set sb to sp, and jump to address in register R
+1111 1000 0000 1111	call q				push sp, sb, pc, set sb to sp, and jump to address literal q
+qqqq qqqq qqqq qqqq
+qqqq qqqq qqqq qqqq
+qqqq qqqq qqqq qqqq
+qqqq qqqq qqqq qqqq
+
+1111 0001 **** ****						unused
+1111 0010 **** ****						unused
+1111 0011 **** ****						unused
+1111 0101 **** ****						unused
+1111 0110 **** ****						unused
+1111 0111 **** ****						unused
+1111 1001 **** ****						unused
+1111 1010 **** ****						unused
+1111 1011 **** ****						unused
+1111 1100 **** ****						unused
+1111 1101 **** ****						unused
+1111 1110 **** ****						unused
+1111 1111 **** ****						unused
+
+
+3.5. Debug Instructions
+-----------------------
+
+Debug instructions start with the bits 00101.
+
+0010 1000 bbbb bbbb cout b				Print b to debug terminal
+0010 1001 0000 rrrr creg r				Print register r to debug terminal (decimal) #NEW#
+0010 1001 0001 rrrr cregx r				Print register r to debug terminal (hexadecimal) #NEW#
+0010 1001 0010 rrrr crega r				Print register r to debug terminal (single ASCII character) #NEW#
+0010 1001 1000 rrrr cin r				Pause CPU until a decimal number is entered; put in register r #NEW#
+0010 1001 1001 rrrr cinx r				Pause CPU until a hexadecimal number is entered; put in register r #NEW#
+0010 1001 1010 rrrr cina r				Pause CPU until an ASCII character is entered; put in register r #NEW#
+
+
+3.6. CHAS Directives
+--------------------
+
+'String'
+	insert String as literal, with prefixed two-byte size
+
+"String"
+	insert String as literal, with prefixed two-byte size
+
+0x00-0x3f
+	bit index literal
+
+0x00-0xff
+	byte literal
+
+0x0000-0xffff
+	word literal
+
+0x00010000-0xffffffff
+	dword literal
+
+0x0000000100000000-0xffffffffffffffff
+	qword literal
+
+repeat <times>
+	repeat preceding literal <times> times
+
+pad <end>
+	repeat preceding literal until entire program is <end> words long
+
+pad <label>+<end>
+	repeat preceding literal until <end> words follow <label>
+
+<label>:
+	add current offset as referenceable address
+
+define <name> <literal>
+	define constant as hex or decimal literal
+
+; comment
+
+The CHAS syntax described here does not support any sort of syntactic sugar for dereferencing.
+
+
+3.7. Optimization
+-----------------
+
+The CHASM instruction bus needs to be at least 80 bits long, to accommodate a 16-bit instruction followed by a 64-bit literal or address, as used in many two-operand opcodes. If it encounters an instruction that has been truncated at the end of the bus, it must stall (re-read instructions until the full instruction is visible.) This could waste as many as 4 cycles per max-width instruction if they are spaced pathologically with 4 words between them.
+
+This implies a physical implementation most likely would have at least 5 pipeline units (one for each 16-bit machine instruction that could potentially fit in a 80-bit word).
+
+To avoid stalling, a good optimizing assembler should aim to align max-width instructions on multiples of 5, by rearranging independent instructions until the minimum possible stall count is achieved, and by inserting null opcodes so the CPU knows to just jump forward by an entire bus length. An optimal algorithm for this knapsack-packing problem is outside the scope of this specification.
+
+=============
+4. ADDRESSING
+=============
+
+CHASM addresses indicate the locations of 16-bit values in memory. Programs can address up to 32 exabytes (2 ^ 64 = 16 x 1024 ^ 6 words) of data. Application programmers do not need to know any more than this, as applications see a stitched-together view of memory designed for their convenience.
+
+To the kernel, CHASM has four layers of memory:
+
+1. "Real memory" refers to the actual contents of the system's RAM. Running programs cannot view or manipulate real memory directly; they may only see flat memory.
+2. "Flat memory" refers to the memory layout after devices have been added. Device addresses are defined by the DMT (see 8.)
+3. "Dynamic memory" or "mapped" refers to the memory layout after the Memory Map Table (MMT) has been applied. In a timesharing operating system, each process has its own MMT, which lays out a view of memory that contains only what the application needs to see. Along with a good set of interrupt masks and judicious use of ring numbers, this completely sandboxes user applications.
+
+While the M flag is set, memory mapping is enabled. The 'lmmt' instruction must be used beforehand to indicate a valid Memory Map Table (MMT). While memory mapping is enabled, the available memory is determined according to the particulars of the memory map, described in section 6.
+
+
+4.1. Reserved Addresses
+-----------------------
+
+The following addresses in flat memory are reserved. Each address indicates the location of a 16-bit value.
+
+	0x 0000 0000 0000 0000 - null jump guard
+	0x 0000 0000 0000 0010 - interrupts table entry 1 (254 x 16 words = 8128 bytes) - see 5. INTERRUPTS TABLE
+	0x 0000 0000 0000 0fef - end of interrupts table (end of int 254)
+	0x 0000 0000 0000 0ff0 - start of unused int 255 entry
+	0x 0000 0000 0000 0fff - end of unused int 255 entry
+	0x 0000 0000 0000 1000 - start of DMT (256 x 16 words = 8192 bytes) - see 8. DEVICE MANAGEMENT TABLE
+	0x 0000 0000 0000 2fff - end of device management table
+	0x 0000 0000 0000 3000 - start of resident firmware (0x1e000 words, 245760 bytes)
+	0x 0000 0000 0001 ffff - end of resident firmware
+	0x 0000 0000 0002 0000 - beginning of bootloader code
+
+When the computer initializes, execution begins at 0x0. This is initialized to contain the null jump guard, which is a `jmp 0x3000` instruction that moves execution to the start of the firmware. The RAM shadowed by the firmware is inaccessible unless the firmware is unloaded.
+
+==========================
+5. INTERRUPT ADDRESS TABLE
+==========================
+
+In CHASM, interrupts are used as a bi-directional mode of communication between hardware and software, in addition to communication between software programs. Aside from a handful of interrupts reserved for CPU and ROM use, the interrupt numbers used for communication are chosen by the operating system.
+
+The interrupts table contains only 254 entries of a possible 8-bit indexing space. Interrupt 0 is used to halt the entire system, and its space in memory is taken up by a jmp to 0x2000, called the null jump guard. Interrupt 255 is reserved for responding to pending interrupts that may have accumulated while interrupts are masked.
+
+Pending interrupts are answered in ascending numeric order, so lower-numbered interrupts are considered higher priority.
+
+An IAT entry is as follows:
+
+	1 bit: is the interrupt enabled?
+	1 bit: global vs. local
+		0 = jump target is a flat memory address
+		1 = jump target is a mapped memory address
+	1 bit: MMT state on entering interrupt?
+		1 = enable, using MMT below
+		0 = disable during interrupt
+	1 bit: is the interrupt pending?
+	2 bits unused
+	1 bit: is this a device interrupt?
+	
+	8 bits: device address (for device interrupts)
+	8 bits: mask for each ring (0-7)
+	40 bits unused
+	64 bits address to jump to (memory words)
+	64 bits unused
+	64 bits address of MMT to use during interrupt
+
+To trap an interrupt, simply write an entry on the interrupt address table. When a device's Event Interrupt Number is set (see 8. DEVICE MANAGEMENT TABLE), the DMU automatically overwrites its incoming and outgoing interrupts in the IAT.
+
+The interrupt masks determine which interrupts can fire while the CPU is executing code in the corresponding ring. If a bit is 1, then the interrupt is allowed to fire; otherwise it is simply marked as pending.
+
+By convention, interrupts use registers in descending order for parameter passing, suggesting the mnemonic "register 'H' stands for 'Hardware' interrupts, and register 'A' is for 'Application' data."
+
+
+5.1. List of Interrupts
+-----------------------
+
+Number		Generator	Registers	Description
+0x00 to 0f	mixed		mixed		system interrupts; see 5.2.
+0x00		program		---			system halt
+0x01		CPU			---			device management table modified
+0x02		CPU			h			invalid read/write
+0x03		CPU			---			stack overflow
+0x04		CPU			h			invalid table
+0x05		CPU			h			cache miss
+0x07		program		g, h		set next timer
+0x06		CPU			g			timer triggered
+0x10 to 1f 	mixed		mixed		firmware routines; see 5.3.
+0x20 to 9f	program		mixed		reserved for software; see 5.3.
+0x20		program		---			yield to kernel
+0x21		program		---			exit program
+0xa0 to fe  mixed		mixed		reserved for devices; see 5.4.
+0xff		program		---			call pending interrupt (when status.IE is 0)
+
+
+5.2. System Interrupts
+----------------------
+
+Interrupt 0 halts the CPU.
+Interrupt 1 indicates that the device management table has been modified.
+Interrupt 2 indicates that a read or write to unmapped or outside memory will occur in the next instruction (at ra). The kernel should trap this and either kill the offending process or load a virtual memory page from a swap device using the page number in register g. Register h will contain the page table entry described at 6. MEMORY MAP TABLE. This interrupt is non-maskable and always enabled.
+Interrupt 3 indicates that a push instruction (at ra) would result in setting unmapped memory. The kernel should trap this. It may attempt to recover from the error by allocating more stack, or simply kill the process, or patch the instruction to exit the program, etc. Returning from the interrupt will resume execution of the program at the offending instruction. It is non-maskable. If it is disabled, interrupt 2 will fire instead.
+Interrupt 4 is generated by the CPU when problems are detected with the memory map table, interrupt address table, device map table, or any other table. It is non-maskable and always enabled.
+Interrupt 5 indicates that a read or write to mapped but uncached memory has occurred. If it is disabled then the CPU stalls until the cache is filled.
+Interrupt 6 is trapped to receive timer events. The g register (0-31) matches that provided when the timer was created with interrupt 7.
+Interrupt 7 is used to set the next timer event, where register h specifies the number of cycles to the next event, and g indicates the timer ID (0-31). The high bit of register h determines whether the timer will be recurring. Up to 32 timers may be set at a time. If g is the tag of an existing timer and h is 0, that timer is removed.
+
+
+5.3. OS Interrupts
+------------------
+
+Interrupts 0x10 through 0x1f are reserved for the system firmware. See 9. HAIDEIA FIRMWARE ROM.
+
+Interrupts 0x20 through 0x9f are available for OS use.
+
+Interrupt 0x20 has special significance as the 'yield' interrupt, indicating the task is waiting for some event to continue.
+
+Interrupt 0x21 has special significance as the 'exit' interrupt, indicating the task is done.
+
+
+5.4. Device Interrupts
+----------------------
+
+Devices (see 8. DEVICE MANAGEMENT TABLE and 10. SPECIFIC DEVICES) may both generate and receive interrupts. The base number of these interrupts is specified in the device management table, called the Event Interrupt Number. A device may use up to two interrupts, called the DEVICE EVENT INTERRUPT and the DEVICE CONTROL INTERRUPT.
+
+The event interrupt is generated by the device, and uses the Event Interrupt Number (EIN) as specified in the device management table (see 8.)
+
+The control interrupt may be called by software to send messages to the device. The Control Interrupt Number (CIN) is determined by adding 1 to the Event Interrupt Number.
+
+The device manager unit monitors the device management table and will accept alterations by the OS.
+
+Standard device interrupts include:
+
+	EIN	CIN	Device
+	---	---	------
+	ac*	ad	Ellinill Random Number Generator
+	ae	af	Vaul Power Control
+	c0	c1	CHASM CPU (multi-processor configuration)
+	d0	d1*	Atharti Video System
+	d8	d9	Kharaidon Keyboard
+	e0	e1	Loec Mouse
+	e2	e3	Lileath EtherNet Adapter
+	ec	ed	Drakira Vector Processor
+	f0	f1	Hoeth Storage Controller
+	fc*	fd	Lithrai Real-Time Clock
+	fd*	fe	Chroesh Beeper
+	
+* = Not used by device protocol
+
+Interrupt 0 is reserved for system use (it halts the entire system). Setting a device's EIN to 0 will prevent it from generating or receiving interrupts.
+
+By convention, device event interrupt numbers should be mapped within the range 0xa0 to 0xfd. Since interrupt 0xff is illegal (that spot on the table contains the MMT pointer), only purely input-only devices, such as mice, can be safely assigned to use 0xfe.
+
+Interrupt numbers determine the order in which pending interrupts are answered by the `int 255` instruction, with lower-numbered interrupts always being answered first. An effective system configuration assigns device EINs with this in mind.
+
+
+5.5. IRET Types
+---------------
+
+When an interrupt is fired, there are five different code paths that the CPU may take to push state information onto the stack. Selecting the correct code path depends on whether a Memory Map Table is active before or during the interrupt. CHASM also allows interrupts to jump between code that involves different MMTs, but in all cases, real addresses must be known for the memory map address and the interrupt entry point.
+
+5.5.1. Type A: Mapless
+
+In a Type A interrupt, control is transferred from a non-mapped program into a non-mapped interrupt handler. To enter this path, both the CPU M flag and the M flag (0x20) in the interrupt table should be zero.
+
+When the interrupt fires, it does the following:
+
+	pusha
+	load pc IA			;interrupt address (see 5.)
+	copy ra sp			;back up stack pointer
+
+The interrupt can then go ahead and do its business, likely starting with setting up its own stack.
+
+The IRET instruction reverses the process. The CPU recognizes an IRET should follow the Type A path when the MMR register is empty (i.e., `lmmt 0`) and the M flag is disabled. The Type A IRET does the following:
+
+	copy sp ra			;restore stack pointer
+	popa				;this restores the pc register
+
+5.5.2. Type B: Interrupt Adds Mapping
+
+In a Type B interrupt, control is transferred from a non-mapped program into a mapped interrupt handler. This might, for example, represent a driver catching a device event.
+
+When the interrupt fires, the CHASM CPU detects that the M flag is off, but that the IAT specifies mapping should be used for this interrupt (flag 0x20). The CPU then does the following:
+
+	pusha
+	load pc IA			;interrupt address (see 5.)
+	lmmt IMMT			;interrupt MMT address (see 5.)
+	copy ra sp			;back up stack pointer
+	set status 0x0b		;enable M (memory mapping)
+	clear status 0x18	;disable RM0
+	clear status 0x19	;disable RM1
+
+When the IRET instruction occurs, the CPU notices that the M flag is enabled and checks RM0 and RM1. To recognize a Type B IRET, both RM0 and RM1 must be 0.
+
+The IRET then does the following:
+
+	lmmt 0				;clear MMR
+	clear status 0x0b	;clear M
+	copy sp ra			;restore stack pointer
+	popa				;restore all registers
+
+5.5.3. Type C: Map-Escape Interrupt
+
+In a Type C interrupt, control is transferred from a program that uses memory mapping into an interrupt handler that does not, which is typical of kernel system calls.
+
+When the interrupt fires, the CHASM CPU does the following:
+
+	pusha
+	clear status 0x0b	;disable M (memory mapping)
+	load pc IA			;interrupt address (see 5.)
+	copy ra sp			;back up stack pointer
+
+Returning via the Type C code path occurs when the MMR is non-zero but the CPU's M flag is zero. The IRET statement performs:
+
+	copy sp ra			;restore stack pointer
+	set status 0x0b		;enable M
+	popa				;restore all registers
+
+5.5.4. Type D: Alternate-Map Interrupt
+
+In a Type D interrupt, control moves between two different bodies of code that use different memory mapping tables. The CPU detects that the Type D code path is appropriate if the M bit is enabled in both the CPU's status register and the first word of the IAT's entry for the interrupt in question, but the MMR does not match the interrupt's MMT address.
+
+Firing the interrupt for a Type D is equivalent to the following:
+
+	pusha
+	push MMR
+	clear status 0x0b	;clear M
+	copy ra sp			;back up stack pointer
+	lmmt IMMT			;load interrupt's MMT
+	copy pc IA			;load interrupt's entry point
+	set status 0x0b		;set M
+	set status 0x18		;enable RM0
+	clear status 0x19	;disable RM1
+
+The decision to IRET via the Type D path is made by noticing that the M flag is enabled, and that the RM0 flag is enabled, but the RM1 flag is disabled. Without the RM0 and RM1 status, the CPU would not be able to distinguish between Type B, C, and E returns.
+
+The IRET of Type D does the following:
+
+	clear status 0x0b	;clear M
+	clear status 0x18	;disable RM0
+	copy sp ra			;restore stack pointer
+	pop MMR				;restore MMT
+	set status 0x0b		;set M
+	popa				;restore all other registers, including pc
+
+5.5.5. Type E: Same-Map Interrupt
+
+In a Type E interrupt, control moves from one address to another while preserving the memory map. The CPU selects the Type E code path if the M flag is enabled in the CPU's status register and also enabled in the first word of the IAT's entry for this interrupt, and the contents of MMR match the interrupt's specified MMT address in the IAT.
+
+Firing a Type E interrupt is equivalent to:
+
+	pusha
+	clear status 0x0b	;clear M
+	copy ra sp			;back up stack pointer
+	copy pc IA			;jump to interrupt body
+	set status 0x0b		;set M
+	set status 0x19		;enable RM1
+	clear status 0x18	;disable RM0
+
+When the IRET statement is reached, the CPU recognizes a Type E IRET by noticing the M and RM1 status are enabled, but the RM0 flag is disabled. It then executes:
+
+	clear status 0x19	;disable RM1
+	clear status 0x0b	;clear M
+	copy sp ra			;restore stack pointer
+	set status 0x0b		;set M
+	popa
+
+
+===================
+6. MEMORY MAP TABLE
+===================
+
+Physically, the CHASM system has three kinds of memory: device memory, main memory, and cache. By default, a running program sees only main memory. Cache is transparently used to buffer frequently-accessed values in main memory, and device memory is mapped invisibly using the DMT.
+
+Except for very simple applications, it is typical to want to conceal some or most of this memory from user programs, under the principle of least trust. The dynamic layout, or view, of memory available to the running program is determined by the Memory Map Table, which is swapped out by the kernel during context switches.
+
+The CPU detects writes to the MMR register and updates the memory mapping table accordingly. It must be a real address and can only be updated while memory mapping is disabled. Setting the MMR register to 0 disables memory mapping, but setting it to another value does not enable memory mapping until the M flag is set.
+
+Updates to the MMT can be committed without changing the pointer by rewriting the current value:
+
+	load.r a 0x1ffc
+	store.r a 0x1ffc
+
+In a typical timesharing system, the kernel should maintain a collection of MMTs: one is built for each process, and the MMT pointer (MMR) is directed toward the one that is currently relevant. Then the M bit in the status register is enabled whenever leaving the kernel.
+
+The MMT begins with a 64-bit value specifying the number of entries it contains and the page size to use:
+
+	3 bits: page size indicator
+	61 bits: page count
+
+The actual page size is calculated as ( 2 << (7 + page size indicator) ) words. Thus, a page size indicator of 0 indicates the table is using 256-word (512-byte) pages. Each increment of the page size indicator doubles the size, so that the maximum page size indicator value (0b111) results in pages of 65536 words (128 kilobytes.)
+
+To perform dynamic address translation and locate where a virtual page is in flat memory, the MMU jumps to the offset:
+
+	MMR + 4 * (1 + virtual page number)
+
+where it reads 64 bits:
+
+	48-56 bits: page address in flat memory (address of page start with bottom bits removed)
+	0-8 bits: unused
+	8 bits: flags
+
+The flags are:
+
+	0x80	P: Page is in page table? (Set to 1 when creating page table)
+	0x40	X: Page is executable?
+	0x20	R: Page is readable?
+	0x10	W: Page is writable?
+	0x08	S: Page is owned by this task and shared with another process?
+	0x04	$: Page is owned by another task but shared with this process?
+	0x02	V: Page is dirty?
+	0x01	E: Entry is valid (currently loaded in memory)?
+
+The 0-8 unused bits in the memory map page are available to the kernel for strategizing how to swap out pages.
+
+If the CPU attempts to access an invalid entry, it is assumed to have been swapped out to disk, and an interrupt is generated for the kernel to trap. This is called a page fault:
+
+	Interrupt Number: 2 (Page Fault)
+	Register ra = instruction that triggered the page fault
+	Register g = page number (page table index) that failed to load
+	Register h = page table entry (if one exists) for the missing page
+		- If flag P (0x80) is set, then page table entry exists
+		- Otherwise a new page table entry needs to be created, or the request was invalid to begin with
+
+The kernel should load the page from the swap file, or attempt to remedy the request some other way (e.g. killing the offending process) as appropriate.
+
+
+6.1. Leaving mapped mode
+------------------------
+
+Memory mapping could be disabled entirely by clearing the MMT pointer:
+
+	lmmt 0
+
+However, it also suffices to clear the M bit (bit 0x0b) in the status register:
+
+	clear status 0x0b
+
+The M bit is automatically cleared when the MMT pointer is cleared, but the reverse is not true. The CPU depends on a deactivated-but-valid MMR to restore memory mapping when leaving an unmapped kernel interrupt (see 5.5.), and will apply this change automatically as directed by the interrupts table (see 5.)
+
+
+====================
+7. PROCESSES & RINGS
+====================
+
+Rings are a control mechanism for preventing access to core system functions by tasks that do not require it. By convention they are numbered from 0 upward, with 0 being the most powerful and higher numbers being less privileged.
+
+In CHASM, there are 8 rings. Bits 0x08 to 0x0a of the status register specify the current ring number, which can be read with:
+
+	copy a status
+	rsh a 8
+	and a 0b111
+	; a = (status >> 8) & 0b111
+
+The rings are defined as follows:
+
+	Ring 0 - Kernel - No restrictions
+	Ring 1 - Microkernel server - Cannot alter status flags M, R0, R1, R2, CI
+	Ring 2 - Daemon
+	Ring 3 - User-Mode Driver
+	Ring 4 - User Session - Cannot write to mapped device memory or call device interrupts
+	Ring 5 - User Task
+	Ring 6 - Batch Task
+	Ring 7 - Worker Thread
+
+Aside from the restrictions indicated above, the rings are expected to be defined by the kernel. In particular, the per-ring interrupt mask table (see 5.)
+
+==========================
+8. DEVICE MANAGEMENT TABLE
+==========================
+
+The Device Management Table, or DMT, is populated by a custom chip called the Device Manager Unit (DMU) at system startup. The DMU also modifies the table whenever a hardware configuration change occurs. Each entry is 16 words (256 bits) long.
+
+The entries are structured as follows:
+
+	PRSWM.wr IFVQApUG  <manufac turer_#>  <product /driver>  <rev###> <event#>
+	........ ........  ........ ........  <tempera ture###>  <power## #######>
+	........ ........  ........ ........  ........ <DMA_pag  es###### #######>
+	........ .<DMA_st  art##### ########  ######## ########  ######## #######>
+	
+
+	word 0:
+	| 2 bytes attribute bits & capabilities:
+		0x8000 = device is present?
+		0x4000 = device is ready?
+		0x2000 = device is safe to unplug?
+		0x1000 = device is working?
+		0x0800 = show device in flat memory? (writable)
+		0x0400 = unused
+		0x0200 = can write arbitrary memory locations
+		0x0100 = can read arbitrary memory locations
+		0x0080 = can generate device event interrupts
+		0x0040 = provides filesystem access using the HOETH controller interface
+		0x0020 = can write registers (without an interrupt)
+		0x0010 = can read registers (without an interrupt)
+		0x0008 = can accept writes to a DMA bitmap (e.g. display)
+		0x0004 = can provide a readable DMA bitmap (e.g. camera)
+		0x0002 = understands commands sent via device control interrupt (e.g. printer)
+		0x0001 = generates commands sent via device event interrupt (e.g. keyboard)
+	word 1:
+	| 2 bytes manufacturer ID
+		0x0000 = homebrew/prototype
+		0x0001 = Pharos Computer Inc
+		0x0002 = Opaque Semiconductor
+		0x0003 = Nanite Systems Corporation
+		0x0004 = Yutani Onsen
+		0x0005 = Chiyoda Security Systems
+		0x0006 = NANOCOM
+		0xfffe = bridged emulator device
+		0xffff = generic/other
+	word 2:
+	| 2 bytes product ID, indicating driver to use
+		0x0001 = CPU
+		0x0005 = real-time clock
+		0x0010 = random number generator
+		0x0102 = ROM
+		0x0104 = serial bus
+		0x0103 = power control
+		0x0110 = terminal
+		0x0111 = text printer
+		0x0112 = postscript printer
+		0x011a = keyboard
+		0x0120 = generic pointing device
+		0x0121 = light pen
+		0x0122 = pressure-sensitive drawing tablet pen
+		0x0200 = drive interface
+		0x075a = drakira vector processor
+		0x1000 = framebuffer video
+		0x2000 = camera
+		0x5001 = beeper
+		0x5005 = audio out
+		0x5006 = audio in
+		0x9000 = modem
+		0x9001 = ethernet
+	word 3:
+	| 1 byte revision number
+	| 1 byte event interrupt number
+	word 4:
+	| 2 bytes unused
+	word 5:
+	| 2 bytes unused
+	word 6:
+	| 2 bytes temperature info (in units of 1/10th of a Kelvin)
+		default = 0x0ba5 (25 degrees Celsius)
+	word 7:
+	| 2 bytes power usage (in units of 1/10th of a Watt)
+		default = 0x0000 (0 Watts)
+	word 8:
+	| 2 bytes unused
+	word 9:
+	| 2 bytes unused
+	words 10-11:
+	| 1 byte unused
+	| 3 bytes memory map size (in 512-word = 1024-byte pages; max 16 GB)
+	words 12-15:
+	| 9 bits unused
+	| 55 bits start address in flat memory (in 512-word = 1024-byte pages) (writable)
+	
+The event interrupt is the interrupt that the device generates when it has something to report to the system. The control interrupt is derived by adding 1 to the number of the event interrupt, and will be trapped by the device itself for sending it commands.
+
+In the specific device signatures provided in 10. SPECIFIC DEVICES, complete signatures are provided as examples of the devices in typical use. When most devices are first discovered, the DMU sets the event interrupt number to 0 for all devices, disabling them. However, there are exceptions:
+
+ - Since this can disable CPUs, the primary processor (see 10.11. CPU) is initialized with its event interrupt number already populated, as 0xc0. 
+ - The ROM device (see 10.10.) uses interrupts 0x10 through 0x1f, and defaults to having its event interrupt field prepopulated with 0x10. Any other value disables firmware interrupts.
+
+When a device's event interrupt number is set, the DMU automatically fills out its entries in the interrupts table (see 5. INTERRUPTS TABLE).
+
+=======================
+9. HAIDEIA FIRMWARE ROM
+=======================
+
+The HAIDEIA firmware is a control program and setup utility similar to PC BIOS and mainframe ROM monitors. It provides:
+
+ - A menu-based configuration user interface
+ - Locating and bootstrapping bootable drives
+ - Assigning standard or custom interrupts to devices
+ - A terminal API for the bootloader
+
+Most functions of a PC BIOS are obviated by the CHASM hardware control interface design (see 10. SPECIFIC DEVICES). A 'real' (i.e., physical) CHASM system might rely on the firmware to provide these programming interfaces for off-the-shelf components.
+
+
+9.1. Configuration UI
+---------------------
+
+The configuration UI can be summoned with interrupt 0x12 and h=1, or dismissed with h=0. Other values for h open specific screens:
+
+	Register h		Result
+	0x00			Close
+	0x01			Main screen
+	0x02			Open config interface for passwords (startup and hardware administration)
+	0x03			View/set current time and date of installed LITHRAI clock
+	0x04			Configure drive boot order
+	0x05			Hardware summary and info;
+					configure device interrupt assignments (see 5.4.);
+					load and save device interrupt assignment presets
+	0x06			Set MAC address for LILEATH network adapter
+	0x07			Enter Recovery Environment
+	0x08			Firmware updater program
+	0x09			Run hardware tests
+	0x0a			Factory reset
+
+Opening the configuration UI will overwrite the interrupt table and is not trivially reversible.
+
+
+9.2. Firmware Interrupts
+------------------------
+
+	Interrupt	Register h	Register g	Result
+	0x10		0			-			Clear screen and disable terminal emulation
+	0x10		1			-			Clear screen and enable terminal emulation
+	0x11		[0,127]		RGBrgbxy	Print character on terminal, but parse register g as 8-bit values:
+											background color R, G, B;
+											foreground color r, g, b;
+											column x (0-119)
+											row y (0-49)
+	0x11		[0,127]		RGBrgb0xFFy	Print character on terminal, but change color (x = 255)
+	0x11		[0,127]		-1			Print character on terminal at next position, conserving all settings
+	0x12		[0,10]		-			See 9.1. Configuration UI
+	0x13		0			-			Disable all device interrupts (see 5.4.)
+	0x13		1			-			Restore standard device interrupts
+	0x13		2			-			Set device interrupts to user-configured values from BIOS settings
+
+
+9.3. Recovery Environment
+-------------------------
+
+The Recovery Environment is a command-line program accessible from within the Haideia firmware. It includes a partial implementation of the Petra filesystem (http://lethe.rhetori.ca/petra-fs.txt). Its purpose is to assist in the configuration and maintenance of storage devices.
+
+Unlike the rest of the Haideia firmware, where configuration changes must be saved to NVRAM, changes performed in the Recovery Environment are committed to disk immediately.
+
+The <path> syntax is identical to that used by the LETHE operating system, using forward slashes as separators, e.g. "/path/to/file", and allowing Unix-like relative paths such as "..", "../sibling", "child", or "./child/grandchild".
+
+The commands accessible from within the Recovery Environment consist ideally of the following. 
+
+Acronym		Command
+Description
+	
+t			type <file>
+Print contents of <file> to console
+
+n/a			[<partition>:]<path>
+Change working directory to relative or absolute path
+
+mb			make-bootable <partition>
+Write standard Lethe boot sector to the drive containing <partition>, which will search for a kernel on the specified partition.
+
+mn			make-normal <drive>
+Zero boot sector of volume <drive>
+
+e			edit [<partition>:]<path>
+Opens a basic text editor similar to Nano.
+
+cv			check-volume [<partition>]
+Repair filesystem corruption on <partition>
+
+c			copy [<partition>:]<source-path> [<partition>:]<dest-path>
+Copy file to new name
+
+cl			clone <source-partition> <dest-partition>
+cl			clone <source-drive> <dest-drive>
+Clone an entire partition or drive. The destination must be at least the same size as the source.
+
+d			delete [<partition>:]<path>
+Delete file or directory
+
+m			move [<partition>:]<source-path> [<partition>:]<dest-path>
+Move file or directory to new name
+
+f			format <partition>|<drive>
+Create new filesystem on <partition>, or build a new partition table on <drive>
+
+ev			edit-volume <drive>
+Opens a basic partition table editor utility for <drive>.
+
+i			info <partition>|<drive>
+Report vital information regarding the specified volume
+
+l			list [[<partition>:]<path>]
+Print contents of directory to console
+
+b			boot <drive>
+Boot <drive>
+
+u			update-firmware [<partition>:]<path>
+Flash new version of Haideia firmware
+
+h			halt
+s			shutdown
+o			off
+Turn off computer
+
+q			quit
+Return to Haideia menu
+
+r			reboot
+Restart computer
+
+As of this writing, it is not certain that all these features will fit within the space available for the ROM.
+
+
+====================
+10. SPECIFIC DEVICES
+====================
+
+10.1. The Atharti Video System
+------------------------------
+
+The ATHARTI video system has the device management table signature:
+
+	c08c 0001 1000 01d0
+	0000 0000 0ba5 0000
+	0000 0000 0000 8000
+	0000 0000 0000 0000
+
+It maps 32 MB (32,768 pages) of memory, which is write-only (the video system can only read it.)
+
+Video memory begins with the following 8-byte data structure:
+
+	1 byte refresh rate (Hz)
+		default = 0x3c (60 FPS)
+	2 bytes screen width
+		default = 0x0460 (1120 px)
+	2 bytes screen height
+		default = 0x0340 (832 px)
+	1 byte pixel format:
+		0x00 = bitmap (1 bpp)
+		0x01 = 16 colors (4 bpp)
+		0x02 = 3-bit R, 3-bit G, 2-bit B (8 bpp)
+		0x03 = 5-bit R, 6-bit G, 5-bit B (16 bpp)
+		0x04 = 8-bit R, 8-bit G, 8-bit B (24 bpp)
+		0x05 = 8-bit R, 8-bit G, 8-bit B, 8-bit gap (32 bpp)
+	4 bytes current frame start (measured in bytes, from start of video memory)
+		default = 0x00100000 (1 MB)
+
+ATHARTI has two memory systems, one exposed here and another called the image buffer. The image buffer is updated whenever the video data structure offset field is written to, even if the value does not change. This serves to prevent screen tearing. The provision of an exact byte offset assists in implementation of smooth full-screen scrolling.
+
+
+10.2. The Loec Pointer Device
+-----------------------------
+
+The LOEC mouse has the device management table signature:
+
+	e085 0001 0120 01e0
+	0000 0000 0000 0000
+	0000 0000 0000 0000
+	0000 0000 0000 0000
+
+Sending the device control interrupt returns:
+
+	register g: 8 bytes X coordinate
+	register h: 8 bytes Y coordinate
+	register f: mouse button level state
+
+A device event interrupt is triggered whenever a mouse button is pressed or released, yielding the same register values as above when answered.
+
+The mouse buttons have the format:
+	1 bit unused
+	1 bit mouse button 7 (shoulder 2) down
+	1 bit mouse button 6 (shoulder 1) down
+	1 bit mouse button 5 (scroll down) down
+	1 bit mouse button 4 (scroll up) down
+	1 bit mouse button 3 (middle) down
+	1 bit mouse button 2 (right) down
+	1 bit mouse button 1 (left) down
+
+The LOEC mouse generates trappable interrupt 0xe0 when a button changes state.
+
+	CPU register h:
+		8 bits mouse's ID in device management table
+
+
+10.3. The Kharaidon Keyboard Device
+-----------------------------------
+
+The KHARAIDON keyboard has the device management table signature:
+
+	e083 0001 011a 01d8
+	0000 0000 0ba5 0032
+	0000 0000 0000 0000
+	0000 0000 0000 0000
+
+The device event interrupt (default: 0xd8) triggers whenever a keyboard key is pressed or released.
+
+	CPU register h: keyboard key scancode (0-255)
+	CPU register g: pressed (1) or released (0)
+
+The device control interrupt (default: 0xd9) can be used to update the keyboard's key lock indicators:
+
+	CPU register h: keyboard LED power state:
+		61 bits unused
+		1 bit scroll lock
+		1 bit caps lock
+		1 bit num lock
+
+
+10.4. The Chroesh Beeper Device
+-------------------------------
+
+The CHROESH beeper has the following DMT signature:
+
+	c002 0002 5001 01fd
+	0000 0000 0ba5 0001
+	0000 0000 0000 0000
+	0000 0000 0000 0000
+
+Although the standard event interrupt number for the beeper is 0xfd, it cannot generate any events, so only its activation interrupt (event interrupt + 1) is relevant.
+
+To send commands to beeper, issue interrupt 0xfe. The beeper reads register h in the following format:
+
+	32 bits duration of tone (in nanoseconds)
+	12 bits volume (0xfff = maximum, 0 = silent)
+	20 bits frequency (in units of 0.0625 Hz; 1 = 0.0625 Hz, 0xfffff = 65535.9375 Hz)
+
+Commands are not queued; any new command overwrites the current one. If any of the 3 parameters are zero, the beeper stops producing audio.
+
+The beeper generates a triangle wave.
+
+
+10.5. The Vaul Power Control Device
+-----------------------------------
+
+The VAUL power control device has the following DMT signature:
+
+	c083 0002 0103 01ae
+	0000 0000 0ba5 0001
+	0000 0000 0000 0000
+	0000 0000 0000 0000
+
+The CHASM system provides power states modelled after ACPI:
+
+	State 	Description
+	  8		Fully functioning (G0-S0)
+	  7		Away mode (monitor off) (G0-S0 subset)
+	  6		Reduced-power CPU mode (G1-S0ix)
+	  5		Power-on suspend (G1-S1)
+	  4		CPU off; caches flushed to RAM (G1-S2)
+	  3		Standby (RAM powered) (G1-S3)
+	  2		Hibernation (dump RAM to disk) (G1-S4)
+	  1		Soft Off (G2)
+	  0		Mechanical Off (G3)
+
+Triggering the control interrupt (i.e. 0xaf) with h set to one of the above values will begin the appropriate changes, and then cause the event interrupt (i.e. 0xae) to fire if necessary, with the h register set to the new state being entered and the g register set to the state being left. The next `ret` will return control to VAUL to finish the state change.
+
+On a physical CHASM system, hardware power buttons on the system would be capable of triggering actions equivalent to the control interrupt for VAUL, e.g. a typical power on/off button might switch between 1 and 8. The event interrupt (0xae) provides a uniform interface for the OS to handle these changes insofar as it needs to do so.
+
+Examples of interrupt activities might be asking the user to save their work, or writing/reading RAM from disk for entering/leaving the Hibernation state.
+
+
+10.6. The Drakira Vector Processor
+----------------------------------
+
+The DRAKIRA is a dedicated integrated circuit with many simple compute units designed to efficiently perform bulk operations on data. A 'real' DRAKIRA VP would include a serial output port, which can be used with adapters to generate digital or analog signals for domain-specific purposes. Examples of applications for the DSP include audio processing, modem simulation, 2D and 3D graphics processing, statistical modeling, physics simulations, and neural network training or inference; however, unlike a DSP, the DRAKIRA chip works internally only with digital values, and thus more closely resembles a GPU or array processor.
+
+DRAKIRA has the following DMT signature:
+
+	c08f 0006 075a 20ec
+	0000 0000 0ba5 0100
+	0000 0000 0000 0400
+	0000 0000 0000 0000
+
+The base model maps 1024 memory pages (1 MB), where the top half (pages 0 to 1ff) consists of input to DRAKIRA, and the bottom half (pages 200 to 3ff) consists of output from the DRAKIRA chip. Data is sent by writing to the Drakira input buffer. Commands are sent by pointing to a compiled binary in main system memory and sending a control interrupt (standardly, 0xed). Results are obtained by trapping the event interrupt (standardly, 0xec) and monitoring the Drakira output buffer.
+
+DRAKIRA supports multi-programming (task-switching) of up to 64 jobs by assigning the current I/O buffers and configuration options to a job identifier called a PID. The kernel can instruct Drakira to switch to a new task with the control interrupt h=0x0c g=<PID>.
+
+
+10.6.1. Drakira Control Interrupts
+
+Control interrupts to Drakira can trigger program execution, swap the input and output buffers, switch between stored tasks, and change the setup and behavior of the vector processor.
+
+Register h					Register g					Effect
+0							0							Clear all settings and buffers
+1							<address>					Run program at <address>
+((32-bit length)<<32)+2		<address>					Copy input buffer from <address>
+((32-bit length)<<32)+3		<address>					Write output buffer to <address>
+((32-bit 'x')<<32)+4		(32-bit 'y')(32-bit 'z')	Set dimensions of primary matrix to 'x'*'y'*'z' data units
+((32-bit 'x')<<32)+5		(32-bit 'y')(32-bit 'z')	Set dimensions of secondary matrix to 'x'*'y'*'z' data units
+((32-bit 'x')<<32)+6		(32-bit 'y')(32-bit 'z')	Set dimensions of tertiary matrix to 'x'*'y'*'z' data units
+((32-bit 'x')<<32)+7		(32-bit 'y')(32-bit 'z')	Set dimensions of quaternary matrix to 'x'*'y'*'z' data units
+0x10						-							Retrieve dimensions of primary matrix using above format
+0x11						-							Retrieve dimensions of secondary matrix using above format
+0x12						-							Retrieve dimensions of tertiary matrix using above format
+0x13						-							Retrieve dimensions of quaternary matrix using above format
+((32-bit 'n')<<32)+8		-							Retrieve value of option 'n' and store in g
+((32-bit 'n')<<32)+9		(any)						Set option 'n' using value in g
+0x0a						-							Return I/O buffer swap flag in g
+0x0b						0 or 1						Swap I/O buffers?
+0							(non-zero PID)				Forget settings and data associated with PID in g
+0x0c						(non-zero PID)				Switch to settings and data associated with PID in g
+0x0d						(non-zero PID)				Copy current settings and data to new PID in g
+0x0e						(see 10.6.2.)				Set data format
+
+
+10.6.2. Drakira Data Formats
+
+Drakira is matrix-oriented, but can use a vast range of different data formats for its buffers to achieve maximum density. Control interrupt 0x0e sets the data format used by providing a format identifier in register g, which is specified as follows:
+
+	[6 bits: unit length][6 bits: data length][6 bits: right padding][1 bit: signed flag][1 bit: special flag]
+
+Unit length, data length, and right padding all specify quantities of bits, i.e. 000001 = 1 bit, 001000 = 8 bits, 100000 = 32 bits, and so on. For unit length and data length, a value of 000000 indicates 64 bits.
+
+Data length and right padding are used to create masks for only affecting certain bits. For example, a unit length of 32 bits but a data length of 8 bits only alters the last 8 bits of a 32-bit word; increasing the right padding moves this 8-bit 'window' leftward. This is useful for work with packed data, e.g. alpha masking in graphics, as the other bits can be carried through without modification (depending on settings). Bits that are within the window are called masked-on, and bits outside of it are called masked-off. Drakira will generate event interrupt h=0x04 if the data length + right padding exceeds the unit size.
+
+The signed flag marks a format as being in two's complement. The special flag marks a format as being a floating-point variable, but only if the data length is 32 or 64 and the signed flag is enabled also; otherwise it simply marks a specific type from a predefined list. Drakira will generated event interrupt h=0x03 if the special type is invalid.
+
+Some examples of formats supported by Drakira are as follows:
+
+Unit	Data 	Padding	Signed?	Special?	Hex		Name
+000000	000000	000000	0		0			0x00000	uint64
+000000	000000	000000	1		0			0x00002	int64
+000001	000001	000000	0		0			0x04100 bits
+000001	000001	000000	1		0			0x04102 binary polar
+000010	000010	000000	1		0			0x08202	[-2,+1]
+000010	000010	000000	1		1			0x08203	balanced ternary (0b11 = -1, 0b10 = NaN)
+001000	001000	000000	0		0			0x40800	uint8
+100000	001000	000000	0		0			0x80800	32-bit RGBA 8-bit alpha channel
+100000	001000	001000	0		0			0x80820	32-bit RGBA 8-bit blue channel
+100000	001000	010000	0		0			0x80840	32-bit RGBA 8-bit green channel
+100000	001000	100000	0		0			0x80880	32-bit RGBA 8-bit red channel
+100000	100000	000000	1		1			0x82003	32-bit float (single precision)
+000000	000000	000000	1		1			0x00003	64-bit float (double precision)
+100000	000000	000000	1		1			0x80003	2x32-bit float (single precision) complex number
+
+
+10.6.3. Drakira Event Interrupts
+
+Drakira generates event interrupts whenever work is done or impossible.
+
+Register h	Register g		Indication
+0x00		(PID)			Success
+0x01		(PID)			Incompatible matrix dimensions
+0x02		(PID)			Requested dimensions exceed allocated memory
+0x03		(PID)			Undefined special data format
+0x04		(PID)			Data+padding exceeds unit size
+
+
+10.6.4. Drakira Settings
+
+Control interrupts h=0x********00000008 and h=0x********00000009 are used to adjust settings, where ******** is a 32-bit identifier indicating which setting to adjust.
+
+By default, all settings have the value 0. New values for the settings are passed by setting register g to the desired value.
+
+Setting	(h>>32)		Value (g)	Effect
+0x000000001			0			Enable circular arithmetic (MAX + 1 = MIN, MIN - 1 = MAX)
+0x000000001			1			Enable saturation arithmetic (MAX + 1 = MAX, MIN - 1 = MIN)
+0x000000001			2			Enable unsigned NaN arithmetic (MAX + 1 = NaN, MIN - 1 = NaN)
+0x000000001			3			Enable signed NaN arithmetic (MAX + 1 = NaN, MIN - 1 = -NaN)
+0x000000002			0			Propagate masked-off bits from leftmost operand (if data format has them; see 10.6.2.)
+0x000000002			1			Always set masked-off bits to 0 (if data format has them; see 10.6.2.)
+0x000000002			2			Always set masked-off bits to 1 (if data format has them; see 10.6.2.)
+
+0x000000003			0			'rotate' expects Euler vectors as second argument
+0x000000003			1			'rotate' expects quaternion as second argument (data must be 3D)
+0x000000004			0			'polygon' uses monochrome screening (no smoothing)
+0x000000004			1			'polygon' uses Gupta-Sproull anti-aliasing
+0x000000005			0			'blend' adds matrices together
+0x000000005			1			'blend' multiplies matrices together
+0x000000005			2			'blend' averages matrices together
+0x000000005			16			'blend' adds pixels together, interpreting 32-bit RGBA with straight alpha
+0x000000005			17			'blend' multiplies pixels together, interpreting 32-bit RGBA with straight alpha
+0x000000005			18			'blend' adds pixels together, interpreting 32-bit RGBA with straight alpha
+0x000000005			32			'blend' adds pixels together, interpreting 32-bit RGBA with premultiplied alpha
+0x000000005			33			'blend' multiplies pixels together, interpreting 32-bit RGBA with premultiplied alpha
+0x000000005			34			'blend' adds pixels together, interpreting 32-bit RGBA with premultiplied alpha
+
+0x100000001			i			Bit duration numerator: Bits on input pins are i/j nanoseconds long
+0x100000002			j			Bit duration denominator: Bits on input pins are i/j nanoseconds long
+0x100000003			i			Bit duration numerator: Bits on input pins have an i/j nanosecond gap
+0x100000004			j			Bit duration denominator: Bits on input pins have an i/j nanosecond gap
+0x100000012			n			Set noise floor for AM input (amplitude-modulated signals on input pins below n microvolts are MIN)
+0x100000013			n			Set ceiling for AM input (amplitude-modulated signals on input pins above n microvolts are MAX)
+0x100000022			n			Set frequency floor for FM input (frequency-modulated signals on input pins oscillating below n Hz are MIN)
+0x100000023			n			Set frequency ceiling for FM input (frequency-modulated signals on input pins oscillating above n Hz are MAX)
+0x200000001			i			Bit duration numerator: Bits on output pins are i/j nanoseconds long
+0x200000002			j			Bit duration denominator: Bits on output pins are i/j nanoseconds long
+0x200000003			i			Bit duration numerator: Bits on output pins have an i/j nanosecond gap
+0x200000004			j			Bit duration denominator: Bits on output pins have an i/j nanosecond gap
+0x200000012			n			Set floor for AM output (outputs of MIN correspond to n microvolts)
+0x200000013			n			Set ceiling for AM output (outputs of MAX correspond to n microvolts)
+0x200000022			n			Set frequency floor for FM output (outputs of MIN correspond to n Hz)
+0x200000023			n			Set frequency ceiling for FM output (outputs of MAX correspond to n Hz)
+0x100000000			0			Input signals are amplitude-modulated
+0x100000000			1			Input signals are frequency-modulated
+0x200000000			0			Output signals are amplitude-modulated
+0x200000000			1			Output signals are frequency-modulated
+
+
+10.6.5. The Drakira ISA
+
+The opcodes for the vector processor are not yet designed. The rest of this chapter provides a candidate list of possible instructions.
+
+Note that the 'input' and 'output' buffers are automatically swapped after each operation that affects the matrices.
+
+`mats`: A bitmask of which of the four input matrices to affect (0000 = none, 1111 = all, 0001 = matrix A only)
+`axis`: A bitmask of the axes to use (001 = x, 010 = y, 100 = z) - usually only one is allowed
+
+General
+
+transpose mats diagonal: Transpose mats along diagonal (0 = XY, 1 = YZ, 2 = ZX)
+offset mats float: Add float to all elements of mats
+scalar mats float: Multiply all elements of mats by float
+power mats float: Raise all mats to the power of float
+det mats: Compute matrix determinants
+invert mats: Invert matrices, such that mat x mat^-1 = det(mat)
+spectrum mats: Calculate principal components of mats
+min mats axis: Summarize N-dimensional matrices as N-1 dimensional matrices, yielding minimum values of vectors along specified axis
+med mats axis: Summarize N-dimensional matrices as N-1 dimensional matrices, yielding median values of vectors along specified axis
+mean mats axis: Summarize N-dimensional matrices as N-1 dimensional matrices, yielding arithmetic means of vectors along specified axis
+max mats axis: Summarize N-dimensional matrices as N-1 dimensional matrices, yielding maximum values of vectors along specified axis
+geomean mats axis: Summarize N-dimensional matrices as N-1 dimensional matrices, yielding geometric means of vectors along specified axis
+reduce mats: Convert matrices to row-reduced echelon form
+multiply mat mat: Find matrix product
+stdev mat axis: Summarize N-dimensional matrices as N-1 dimensional matrices, yielding standard deviation of vectors along specified axis
+var mat axis: Summarize N-dimensional matrices as N-1 dimensional matrices, yielding variation (stdev^2) of vectors along specified axis
+clamp mats min max: Limit elements of matrices to range [min,max]
+softmax mats scale: Use softmax to limit matrix values to [0,scale]
+log mats base: Take base <base> logarithm of all elements in mats
+rotate vertices vector: Rotate one matrix (list of vertices) using another (column Euler vector or quaternion, see setting 0x000000003)
+translate vertices coordinates: Offset one matrix (list of vertices) by another (column vector)
+scale vertices dimensions: Multiply one matrix (list of vertices) by another (column vector)
+trig mat OP: OP is a constant - sin, cos, tan, ...
+grad mat axis: Calculate derivative of mat along one or more axes (111 = total derivative)
+cum mat axis: Calculate integral of mat along one or more axes (111 = total integral)
+invsqrt mat: Calculate fast inverse square root of vectors
+mag mat axis: Summarize N-dimensional matrices as N-1 dimensional matrices, yielding magnitudes (Euclidean distances) of vectors along specified axis
+norm mat axis: Summarize N-dimensional matrices as N-1 dimensional matrices, normalizing vectors along specified axis so that their magnitudes equal 1
+fcomp mat axis multi: calculate point-value form (reverse FFT) for polynomials in mat along specified axis
+fdecomp mat axis: calculate polynomial coefficients (forward FFT) for vertices in mat along specified axis
+sfcomp mat axis bands limit exp: reverse FFT parameterized for signals analysis
+sfdecomp mat axis bands limit exp: forward FFT parameterized for signals analysis
+project verts hyperplane: project vertices into hyperplane
+sse data ideal: Sum of squared errors
+pairwise mat mat sum? multiply?: perform pairwise summation or multiplication between two matrices
+roots polynomials: Convert a list of polynomials (coefficients) into their roots
+intersect vectors hyperplane: Calculate the points of intersection for a list of vectors with a hyperplane
+
+Graphics
+
+flood mat x y z v t: Matrix flood fill starting from <x, y, z> in mat, replace (current +/- t) with v
+polygon canvas vertices width fill?: draw a list of 2D vertices onto a 2D pixel matrix (canvas) using MAX as color, MIN as background, a line width of <width> pixels (may be 0) with the configured smoothing method (see setting 0x00000004), and then filling the area if specified
+neg matsresample mat new-x new-y new-z kernel
+blend mat mat frac: Combine two matrices with a ratio of frac and the configured blending modes (see setting 0x00000005)
+perlin mat seed x y zero: Fill a 2D matrix with Perlin noise at the origin <x, y> with the offset zero
+
+Signal Processing
+
+quantize mat bands: Convert a floating-point matrix into ints in the range [0,bands-1]
+listen pin mat x s: Collect s samples from input pin and store in column x of mat; generate interrupt with h=PID when done
+send pin mat x s: Transmit s samples on output pin, loaded from column x of mat; generate interrupt with h=PID when done
+pin pin out?: Set pin as input (out?=0) or output (out?=1)
+constant pin voltage: Set pin to constant voltage (microvolts)
+freq pin frequency: Set pin to sine wave at constant frequency (Hz)
+flisten pin mat s exp: As 'listen', but perform Fourier analysis before triggering the interrupt
+fsend pin mat s exp, As 'send', but perform Fourier synthesis before triggering the interrupt
+decode-dtmf mat: Decode DTMF tones in matrix
+encode-dtmf mat: Encode DTMF tones in matrix
+
+
+
+10.7. The Lileath Network Adapter
+---------------------------------
+
+The LILEATH network adapter has the following DMT signature:
+
+	c083 0001 9001 01e2
+	0000 0000 0ba5 0001
+	0000 0000 0000 0000
+	0000 0000 0000 0000
+
+LILEATH is very low-level; it is designed to provide Layer 1 EtherNet packets to the OS, and does no more work than filter packets by destination MAC address.
+
+To set the network adapter's MAC address, send:
+
+	load g 0x012345678abc ;MAC address 01:23:45:67:8a:bc
+	load h 0
+	int 0xe3 ;device interrupt e2, add 1 for sending to device
+
+If the MAC address is set to 0xffffffffffff (ff:ff:ff:ff:ff:ff), then LILEATH will catch all packets it receives.
+
+To get the network adapter's maximum packet size, use:
+
+	load h 1
+	int 0xe3 ;device interrupt e2, add 1 for sending to device
+	; packet size now in h
+
+The typical packet size is 0x02ee (750 words, or 1500 bytes)
+
+To send a packet, use:
+
+	load g packet_size
+	load h packet_addr
+	int 0xe3 ;device interrupt e2, add 1 for sending to device
+
+To receive a packet, trap interrupt 0xe2. Register h will contain a pointer to the packet structure. Register g will contain the length of the packet.
+
+
+10.8. The Hoeth Drive Interface
+-------------------------------
+
+The HOETH Drive Interface has the following DMT signature:
+
+	c0c3 0001 0200 01f0 
+	0000 0000 0ba5 01f4
+	0000 0000 0000 0000
+	0000 0000 0000 0000
+
+Like the LILEATH network adapter, HOETH uses direct memory access rather than memory-mapped pages. It is very basic in the available features; the CPU can only send commands for reading and writing sectors, for getting drive information, and for ejecting media.
+
+Commands are sent to HOETH via interrupt (by convention, `int 0xf1`). In the table below, -1 means all bits set (~0) and 1<<63 means only the high bit set.
+
+	Reg f			Reg g			Reg h			Result
+	-1				1<<63			-1				return number of devices into register h
+	-1				1<<63+<drive #>	-1				eject disk
+	-1				<drive #>		<address>		write drive info at <address> in RAM
+	<sector #>		<drive #>		<address>		read sector to <address> in RAM
+	<sector #>		1<<63+<drive #>	<address>		write sector from <address> in RAM
+
+The drive info table is a 64-bit structure:
+
+	1 byte attribute bits
+		0x80 = present?
+		0x40 = media loaded? (ignored unless medium flags 0x01 (removable) is also set)
+		0x20 = writable?
+		0x10 = currently working?
+	2 bytes manufacturer ID
+		(same list as device manufacturers in 8. DEVICE MANAGEMENT TABLE)
+	1 byte medium flags enum
+		0x01 = removable
+		0x02 = tape drive
+		0x04 = random access
+	4 bytes sector size (in bits)
+	8 bytes cylinder count
+	8 bytes sectors per track
+	8 bytes head count
+
+
+10.9. CHARM Serial Bus Devices
+------------------------------
+
+Serial devices include:
+
+ - Serial Console
+ - Graphics Tablet
+ - Printer
+ - Scanner
+ - Camera
+ - et cetera
+
+
+10.10. ROM
+----------
+
+The system firmware has the device signature:
+
+	c800 0002 0102 0110
+	0000 0000 0ba5 000a
+	0000 0000 0000 00ee
+	0000 0000 0000 0010
+
+When the system initializes, the DMU automatically maps the ROM's 240 pages into the 0x03000-0x1ffff range. The underlying RAM cannot be accessed while the ROM is mapped here. The OS may later unload it if desired, but the code is not relocatable as it expects to be at a fixed address.
+
+The firmware generates and accepts a variety of interrupts in the range 0x10 to 0x1f. See 9. HAIDEIA FIRMWARE ROM for more information.
+
+The ROM device uses interrupts 0x10 through 0x1f, and defaults to having its event interrupt field prepopulated with 0x10. Any other value disables its interrupts.
+
+
+10.11. CPU
+----------
+
+The CHASM CPU itself is a DMU-mapped device. It appears in the DMT as:
+
+	f3bc 0001 0001 01c0
+	0000 0000 0ba5 01f4
+	0000 0000 0000 0001
+	0000 0000 0000 0000
+
+It maps 1 page, which contains 128 bytes describing the entire current register state for that CPU.
+
+This is important when working with a multiple-CPU system, as interrupts can be used to send commands from one CPU to another.
+
+The first CPU is always mapped to system device 0, and is considered the primary processor of the system. This means it can receive interrupts (c0) from the other CPUs, which are termed secondary processors.
+
+A secondary processor may generate a c0 interrupt on the primary processor if:
+
+ - It halts
+ - It attempts to `ret` from ring 2 or greater into PID 0 (kernel) code, indicating the end of a task
+ - A laterally-trapped interrupt is triggered
+
+Interrupt c0 sets the registers as follows:
+	h: memory address where the halt occurred
+	g: if 0, a halt occurred; otherwise:
+		53 unused bits
+
+Job scheduling is expected to be handled exclusively by the primary processor.
+
+The c1 interrupt is used to start a secondary processor, as well as to enable or disable lateral trapping.
+
+`int 0xc1` interprets the registers as follows:
+	h: memory address to jump into if register g is 0
+	g: if 0, jump; otherwise:
+		54 unused bits
+		1 bit: always 1
+		1 bit: enable lateral interrupt?
+		8 bits: interrupt number to lateralize
+
+
+10.12. Lithrai Real-Time Clock
+------------------------------
+
+The LITHRAI clock appears in the DMT as:
+
+	d003 0002 0005 01fc
+	0000 0000 0ba5 0005
+	0000 0000 0000 0000
+	0000 0000 0000 0000
+
+Although the standard event interrupt number for the clock is 0xfc, it cannot generate any events, so the relevant interrupt number is its activation number (event interrupt + 1), standardly 0xfd.
+
+To get the current time, trigger interrupt 0xfd while register h is 0:
+
+	load h 0
+	int 0xfd
+	; the current time is now in register h
+
+To set the current time, trigger interrupt 0xfd while register h is non-zero:
+
+	load h 0x62060440e48c0 ; set the time to 1724447691000000
+	int 0xfd
+	; the current time has been updated
+
+The real-time clock returns the number of microseconds since the Unix epoch.
+
+
+10.13. Ellinill Random Number Generator
+---------------------------------------
+
+The ELLINILL random number generator appears in the DMT as:
+
+	d002 0006 0005 01ac
+	0000 0000 0ba5 0001
+	0000 0000 0000 0000
+	0000 0000 0000 0000
+
+Calling its device control interrupt (by default, 0xad) will set register h to a random 64-bit value.
+
+
+

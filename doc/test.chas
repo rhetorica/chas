@@ -1,0 +1,40 @@
+a b c d e f g h pc pcs sb sp db cb pi flags
+push pop push.a pop.a push.h pop.h load.a load.h store.a store.h copy unpack pack swap clear set
+jmp jne jc jnc jge je jle jg jl jz jnz js jns jip jnip
+int ret call
+C L E G Z S R0 R1 R2 R M IE IP H J
+add.u add.wu add.du add.qu add.ru add.rdu add.rwu add.rqu
+sub.u sub.wu sub.du sub.qu sub.ru sub.rdu sub.rwu sub.rqu
+mul.u mul.wu mul.du mul.qu mul.ru mul.rdu mul.rwu mul.rqu
+div.u div.wu div.du div.qu div.ru div.rdu div.rwu div.rqu
+add.s add.ws add.ds add.qs add.rs add.rds add.rws add.rqs
+sub.s sub.ws sub.ds sub.qs sub.rs sub.rds sub.rws sub.rqs
+mul.s mul.ws mul.ds mul.qs mul.rs mul.rds mul.rws mul.rqs
+div.s div.ws div.ds div.qs div.rs div.rds div.rws div.rqs
+add.b add.wb add.db add.qb add.rb add.rdb add.rwb add.rqb
+sub.b sub.wb sub.db sub.qb sub.rb sub.rdb sub.rwb sub.rqb
+mul.b mul.wb mul.db mul.qb mul.rb mul.rdb mul.rwb mul.rqb
+div.b div.wb div.db div.qb div.rb div.rdb div.rwb div.rqb
+add.f add.df add.qf add.rf add.rdf add.rqf
+sub.f sub.df sub.qf sub.rf sub.rdf sub.rqf
+mul.f mul.df mul.qf mul.rf mul.rdf mul.rqf
+div.f div.df div.qf div.rf div.rdf div.rqf
+and or xor lsh rsh rsh.s lsh.s rol ror not
+store.q store.d store.w store.r store.rq store.rd store.rw
+load.q load.d load.w load.r load.rd load.rw load.rq
+push.q push.d push.w
+pop.q pop.d pop.w
+store load
+cmp cmp.s cmp.f
+pad repeat
+pad label+33
+'alpha'
+;comment
+0b1010
+0x123fe0
+1234
+TODO
+null
+push a
+load.r a,b
+label:
