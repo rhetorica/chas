@@ -119,10 +119,11 @@ The CHASM environment provides memory mapping, paging, and ring-based interrupt 
 The CHASM specification is not yet complete. The following features may be added in the future:
 
  - Complete specification of the DRAKIRA vector processor
- - Specification of serial bus devices (CHARM)
+ - Specification of serial bus devices (CHARM): terminal, printers, scanner
  - CPU instructions for partial loads (with offsets)
  - CPU instructions for orthogonalizing LISP CONS operations (CHASMv2)
  - More complete firmware description
+ - Outstanding non-serial devices: graphics tablet, camera, audio in, audio out, modem
 
 Instructions marked with #NEW# indicate the emulator has not yet been updated to recognize them, or that the format has changed such that the current implementation is incompatible.
  
