@@ -69,9 +69,10 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "load.di", 0x1320, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "load.i",  0x1340, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
 
-    last_opcode = add_opcode(last_opcode, n++, "set.w", 0x1390, O_MONO | O_LIT_16 | O_MONO_AND_LIT);
-    last_opcode = add_opcode(last_opcode, n++, "set.d", 0x13A0, O_MONO | O_LIT_32 | O_MONO_AND_LIT);
-    last_opcode = add_opcode(last_opcode, n++, "set",  0x13C0, O_MONO | O_LIT_64 | O_MONO_AND_LIT);
+    last_opcode = add_opcode(last_opcode, n++, "set.w",   0x1390, O_MONO | O_LIT_16 | O_MONO_AND_LIT);
+    last_opcode = add_opcode(last_opcode, n++, "set.d",   0x13A0, O_MONO | O_LIT_32 | O_MONO_AND_LIT);
+    last_opcode = add_opcode(last_opcode, n++, "set",     0x13C0, O_MONO | O_LIT_64 | O_MONO_AND_LIT);
+    last_opcode = add_opcode(last_opcode, n++, "set.c",   0x13F0, O_MONO | O_LIT_64 | O_MONO_AND_LIT);
 
     last_opcode = add_opcode(last_opcode, n++, "store.w", 0x1400, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "store.d", 0x1500, O_MONO | O_DUO);
@@ -79,6 +80,17 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "store.wi",0x1710, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "store.di",0x1720, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "store.i", 0x1740, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
+
+    last_opcode = add_opcode(last_opcode, n++, "load.c",  0x1900, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "store.c", 0x1C00, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "load.ci", 0x19F0, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
+    last_opcode = add_opcode(last_opcode, n++, "store.ci",0x1AF0, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
+    last_opcode = add_opcode(last_opcode, n++, "load.o",  0x1D00, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "follow.a",0x1D00, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "store.o", 0x1E00, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "load.co", 0x1C00, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "follow.d",0x1C00, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "store.co",0x1F00, O_MONO | O_DUO);
 
     // badly-spaced:
     /*last_opcode = add_opcode(last_opcode, n++, "get.w",   0x1100, O_MONO | O_DUO);

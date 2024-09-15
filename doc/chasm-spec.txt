@@ -121,7 +121,6 @@ The CHASM specification is not yet complete. The following features may be added
  - Complete specification of the DRAKIRA vector processor
  - Specification of serial bus devices (CHARM): terminal, printers, scanner
  - CPU instructions for partial loads (with offsets)
- - CPU instructions for orthogonalizing LISP CONS operations (CHASMv2)
  - More complete firmware description
  - Outstanding non-serial devices: graphics tablet, camera, audio in, audio out, modem
 
@@ -375,7 +374,8 @@ Bitmask				CHAS Mnemonic		Description
 0001 0011 0100 rrrr load.i r <address>	load 64-bit literal as address and get 64 bits to put in r
 0001 0011 1001 rrrr set.w r <value>		load 16-bit literal into the bottom 16 bits of r
 0001 0011 1010 rrrr set.d r <value>		load 32-bit literal into the bottom 32 bits of r
-0001 0011 1100 rrrr set r <value>		load 64-bit literal into the bottom 64 bits of r
+0001 0011 1100 rrrr set r <value>		load 64-bit literal into register r
+0001 0011 1111 0rrr set.c r <value>		load 64-bit literal into CHASMv2 r.d (r must be a-h) #NEW#
 0001 0100 ssss rrrr store.w r s			store 16 bits to (void*)s from r #NEW#
 0001 0101 ssss rrrr store.d r s			store 32 bits to (void*)s from r
 0001 0110 ssss rrrr store r s			store 64 bits to (void*)s from r
@@ -384,9 +384,21 @@ Bitmask				CHAS Mnemonic		Description
 0001 0111 0100 rrrr store.i r <address>	load 64-bit literal as address and store 64 bits from r
 
 0001 1000 ???? ????						'rep' instructions (see 3.3.) #NEW# (moved)
-0001 11** **** ****						unused
-0001 101* **** ****						unused
-0001 1001 **** ****						unused
+
+0001 1001 SSSS 0rrr	load.c r S			CHASMv2 load 64 bits from (void*)s into r.d (r must be a-h) #NEW#
+0001 1010 SSSS 0rrr	store.c r S			CHASMv2 store 64 bits to (void*)s from r.d (r must be a-h) #NEW#
+0001 1001 1111 0rrr	load.ci r <addr>	CHASMv2 load 64 bits from <addr> into r.d (r must be a-h) #NEW#
+0001 1010 1111 0rrr	store.ci r <addr>	CHASMv2 store 64 bits to <addr> from r.d (r must be a-h) #NEW#
+0001 1101 SSSS 0rrr	load.o r S			CHASMv2 load 128 bits from (void*)s into r and r.d (r must be a-h) #NEW#
+0001 1101 SSSS 0rrr	follow.a r S		CHASMv2 synonym for load.o
+0001 1110 SSSS 0rrr	store.o r S			CHASMv2 store 128 bits to (void*)s from r and r.d (r must be a-h) #NEW#
+0001 1101 1111 0rrr	load.oi r <addr>	CHASMv2 load 128 bits from <addr> into r and r.d (r must be a-h) #NEW#
+0001 1110 1111 0rrr	store.oi r <addr>	CHASMv2 store 128 bits to <addr> from r and r.d (r must be a-h) #NEW#
+0001 1100 SSSS 0rrr	load.co r S			CHASMv2 load 128 bits from (void*)s.d into r and r.d (r must be a-h) #NEW#
+0001 1100 SSSS 0rrr	follow.d r S		CHASMv2 synonym for load.co
+0001 1111 SSSS 0rrr	store.co r S		CHASMv2 store 128 bits to (void*)s.d from r and r.d (r must be a-h) #NEW#
+0001 1011 **** ****						unused
+
 
 0010 00vv vvvv rrrr	disable r v			clear bit v in r
 0010 01vv vvvv rrrr	enable r v			set bit v in r #NEW# (moved)
