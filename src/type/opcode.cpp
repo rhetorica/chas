@@ -73,6 +73,7 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "set.d",   0x13A0, O_MONO | O_LIT_32 | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "set",     0x13C0, O_MONO | O_LIT_64 | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "set.c",   0x13F0, O_MONO | O_LIT_64 | O_MONO_AND_LIT);
+    last_opcode = add_opcode(last_opcode, n++, "setcdr.i",0x13F0, O_MONO | O_LIT_64 | O_MONO_AND_LIT);
 
     last_opcode = add_opcode(last_opcode, n++, "store.w", 0x1400, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "store.d", 0x1500, O_MONO | O_DUO);
@@ -91,6 +92,7 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "load.co", 0x1C00, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "follow.d",0x1C00, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "store.co",0x1F00, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "setcdr",  0x1B00, O_MONO | O_DUO);
 
     // badly-spaced:
     /*last_opcode = add_opcode(last_opcode, n++, "get.w",   0x1100, O_MONO | O_DUO);
