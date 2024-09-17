@@ -305,6 +305,7 @@ int symbolize(link<token>* t) {
                                     unpatched = new_patch;
                                 }
                                 TRAILER_SIZE = 4;
+                                opcode_emission = (opcode_emission & 0xfff0) | 0xf;
                             }
                         } else {
                             fprintf(stderr, " -- expected register name, label usage, or numeric literal but got '%s' on line %i\n", r0->child->text, ln);
@@ -492,7 +493,7 @@ int symbolize(link<token>* t) {
                         return 1;
                     } // O_LIT_ONLY
 
-                    if(ins->child->op->format & O_ARITHMETIC_DUO) {
+                    if(ins->child->op->format & (O_ARITHMETIC_DUO | O_ARITHMETIC_TRIO)) {
                         link<token>* r0 = t->next;
                         link<token>* r1 = r0->next;
 
@@ -500,7 +501,7 @@ int symbolize(link<token>* t) {
                             fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
                             return 1;
                         } else if(r0->child->type != TK_REGNAME) {
-                            fprintf(stderr, " -- expected register name but got '%s' on line %i\n", r1->child->text, ln);
+                            fprintf(stderr, " -- expected register name but got '%s' on line %i\n", r0->child->text, ln);
                             return 1;
                         } else if(r0->child->reg->number > 7) {
                             fprintf(stderr, " -- arithmetic operation '%s' on line %i can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, r0->child->reg->name);
@@ -527,7 +528,26 @@ int symbolize(link<token>* t) {
                             ins->child->arg_1 = r1->child;
                             t = t->next;
                         }
-                    } // O_ARITHMETIC_DUO
+                    } // O_ARITHMETIC_DUO | TRIO
+
+                    if(ins->child->op->format & O_ARITHMETIC_TRIO) {
+                        link<token>* r2 = t->next;
+                        if(r2->child->line != ln) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                            return 1;
+                        } else if(r2->child->type != TK_REGNAME) {
+                            fprintf(stderr, " -- expected register name but got '%s' on line %i\n", r2->child->text, ln);
+                            return 1;
+                        } else if(r2->child->reg->number > 7) {
+                            fprintf(stderr, " -- arithmetic operation '%s' on line %i can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, r2->child->reg->name);
+                            return 1;
+                        } else {
+                            printf("got third register argument %s (r%02x)\n", r2->child->text, r2->child->reg->number);
+                            opcode_emission = (opcode_emission & 0xfe3f) | ((r2->child->reg->number & 7) << 6);
+                            ins->child->arg_2 = r2->child;
+                            t = t->next;
+                        }
+                    } // O_ARITHMETIC_TRIO
 
                     if(ins->child->op->format & O_ARITHMETIC_LIT) {
                         link<token>* r0 = t->next;
@@ -894,9 +914,8 @@ int symbolize(link<token>* t) {
                 if(t->child->type == TK_LIT_STRING) {
                     t->child->address = address;
                     address += strlen(t->child->output) >> 1;
-                    unsigned short bytecount = (t->child->output[0] << 8) + t->child->output[1];
                     
-                    printf("%4x\tSTR\t%04x bytes for %04x chars / original text \"%s\"\n", ln, t->child->output_size, bytecount, t->child->text);
+                    printf("%4x\tSTR\t%04x bytes / original text \"%s\"\n", ln, t->child->output_size, t->child->text);
 
                     new_emission->child->text = t->child->output;
                     new_emission->child->size = t->child->output_size;

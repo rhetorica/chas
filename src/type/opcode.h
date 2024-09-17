@@ -34,7 +34,7 @@ struct opcode {
 #define O_DUO_ONLY      0x00000800
 // opcode is from the new arithmetic family and takes two args (SSSRRR):
 #define O_ARITHMETIC_DUO 0x00001000
-// opcode is from the new arithmetic family and has trailer (RRR):
+// opcode is from the new arithmetic family and has a trailer (RRR):
 #define O_ARITHMETIC_LIT 0x00002000
 // opcode may not take STATUS as first operand:
 #define O_STATUS_FORBIDDEN 0x00004000
@@ -44,6 +44,8 @@ struct opcode {
 #define O_UNFINISHED    0xff000000
 // opcode only takes literal:
 #define O_LIT_ONLY      0x00010000
+// opcode takes 3 registers in the last 9 bits:
+#define O_ARITHMETIC_TRIO 0x00020000
 
 
 void init_opcodes();

@@ -14,7 +14,7 @@
                                Pharos Computer Inc
 
                                Created: 2024-08-19
-                               Updated: 2024-09-15
+                               Updated: 2024-09-16
 
 
 
@@ -31,7 +31,7 @@ CONTENTS
 	2.1.2. Signed Integers
 	2.1.3. Bytes and Multi-Bytes
 	2.1.4. Floating Point Numbers
-	2.1.5. Binary-Coded Decimal
+	2.1.5. Strings
 	2.1.6. CONS Addresses
 	2.1.7. Bitwise
 	2.1.8. Drakira-Specific Datatypes
@@ -280,21 +280,27 @@ See IEEE 754 for details about special cases.
 The DRAKIRA vector processor can natively operate on 32-bit single-precision binary floating point values.
 
 
-2.1.5. Binary-Coded Decimal
+2.1.5. Strings
 
-A CHASMv2 binary-coded decimal value holds 16 digits, where hex nibble values above 0x9 are forbidden. This allows for positive values up to 9,999,999,999,999,999.
+A CHASMv2 string consists of a 64-bit size value followed by zero or more bytes of text. CHASM makes no assurances about the encoding of the text. If a CHASM string is an odd number of bytes in length, then the last word's lower eight bits are ignored.
 
-The first (highest) digit may be set to values above 0x9, in which case it has the following special significance:
+An empty string looks the same as an empty 64-bit integer:
 
-Value	Consequence
-0xA		Number is negative; range is -0 to -999,999,999,999,999.
-0xB		Number is fixed-point with precision 2; range is 0.00 to 9,999,999,999,999.99
-0xC		Number is negative and fixed-point with precision 2; range is -0.00 to -9,999,999,999,999.99
-0xD		Positive and overflow
-0xE		Negative and overflow
-0xF		NaN (BCD opcode was used on non-BCD data)
+	0000 0000 0000 0000
 
-Certain operations may involve 32-bit and 16-bit BCD values, in which case they are expected to be positive, values and only affect the bottom portion of the register.
+This sequence defines the string "HI":
+
+	0000 0000 0000 0002 4849
+
+This sequence defines the string "HELLO WORLD" (note the empty last byte):
+
+	0000 0000 0000 000b 4845 4c4c 4f20 574f 524c 4400
+
+The use of a 64-bit string length field may seem excessive, but permits the forward-compatibility with software-defined string libraries, such as "German" strings, without limiting generality.
+
+As with other datatypes, addresses in memory always reference the first word of a multi-word object. This means a string at address *s can be truncated with standard instructions: `store r s`, and its length can be obtained with `load r s`, where `r` is the length in both cases. Aliases for these operations (setlen and strlen) are provided.
+
+Certain string operations may fail. These are strpos, getbyte, and setbyte. The status flag C is set when they fail, and cleared when they succeed.
 
 
 2.1.6. CONS Addresses
@@ -358,15 +364,15 @@ Bitmask				CHAS Mnemonic		Description
 0000 1000 **01 RRRR	store.h R			store all data registers (a-h) to (void*)r (or at literal address if R is 1111)
 0000 1001 **** **** 					unused
 0000 1010 **** ****						unused
-0000 1011 ssss rrrr cdr r, s			CHASMv2 get r.d and store in s.a (CONS shadow decrement register)
+0000 1011 ssss rrrr cdr r s				CHASMv2 get s.d and store in r.a (CONS shadow decrement register)
 										 -- if r is 'status', becomes `flip s` #NEW#
-0000 1011 ssss 1111 flip s				CHASMv2 swap value of s.a and s.d (CONS shadow decrement register) #NEW#
+0000 1011 ssss 1111 flip s				CHASMv2 swap value of s.a and s.d (CONS shadow decrement register)
 0000 1100 ssss rrrr	copy r s			copy value from s into r
-0000 1101 ssss rrrr	unpack r s			CHASMv2 copy value from signed s into BCD r; converting into BCD; top 11 bits are lost. (16-char BCD = 53.15 bits)
-0000 1110 ssss rrrr	pack r s			CHASMv2 copy value from BCD s into signed r, converting bits from BCD, using up to 54 bits.
+0000 1101 ssss rrrr	unused
+0000 1110 ssss rrrr	unused
 0000 1111 ssss rrrr	swap r s			swap values of r and s registers
 
-0001 0000 ssss rrrr load.w r s			load 16 bits from (void*)s into r #NEW#
+0001 0000 ssss rrrr load.w r s			load 16 bits from (void*)s into r
 0001 0001 ssss rrrr load.d r s			load 32 bits from (void*)s into r
 0001 0010 ssss rrrr load r s			load 64 bits from (void*)s into r
 0001 0011 0001 rrrr load.wi r <address>	load 64-bit literal as address and get 16 bits to put in r
@@ -375,16 +381,16 @@ Bitmask				CHAS Mnemonic		Description
 0001 0011 1001 rrrr set.w r <value>		load 16-bit literal into the bottom 16 bits of r
 0001 0011 1010 rrrr set.d r <value>		load 32-bit literal into the bottom 32 bits of r
 0001 0011 1100 rrrr set r <value>		load 64-bit literal into register r
-0001 0011 1111 0rrr set.c r <value>		CHASMv2 load 64-bit literal into r.d (r must be a-h) #NEW#
+0001 0011 1111 0rrr set.c r <value>		CHASMv2 load 64-bit literal into r.d (r must be a-h)
 0001 0011 1111 0rrr setcdr.i r <value>	CHAS synonym of set.c
-0001 0100 ssss rrrr store.w r s			store 16 bits to (void*)s from r #NEW#
+0001 0100 ssss rrrr store.w r s			store 16 bits to (void*)s from r
 0001 0101 ssss rrrr store.d r s			store 32 bits to (void*)s from r
 0001 0110 ssss rrrr store r s			store 64 bits to (void*)s from r
 0001 0111 0001 rrrr store.wi r <addr>	load 64-bit literal as address and store 16 bits from r
 0001 0111 0010 rrrr store.di r <addr>	load 64-bit literal as address and store 32 bits from r
 0001 0111 0100 rrrr store.i r <address>	load 64-bit literal as address and store 64 bits from r
 
-0001 1000 ???? ????						'rep' instructions (see 3.3.) #NEW# (moved)
+0001 1000 ???? ????						'rep' instructions (see 3.3.)
 
 0001 1001 SSSS 0rrr	load.c r S			CHASMv2 load 64 bits from (void*)s into r.d (r must be a-h) #NEW#
 0001 1010 SSSS 0rrr	store.c r S			CHASMv2 store 64 bits to (void*)s from r.d (r must be a-h) #NEW#
@@ -402,7 +408,7 @@ Bitmask				CHAS Mnemonic		Description
 
 
 0010 00vv vvvv rrrr	disable r v			clear bit v in r
-0010 01vv vvvv rrrr	enable r v			set bit v in r #NEW# (moved)
+0010 01vv vvvv rrrr	enable r v			set bit v in r
 0010 1??? ???? ????						debugging functions (see 3.5.)
 
 0011 TTTT ssss rrrr	update r s T		Store 64-bit value from (void*) s in r. If (void*)s is <= T, set to T. #NEW#
@@ -456,7 +462,7 @@ Code	Abbreviation	Description
 011		f 				floating-point
 100		n/a 			bitwise
 101		c 				CHASMv2 cons (unsigned integer in .d partition)
-110		d 				CHASMv2 binary-coded decimal
+110		n/a				CHASMv2 strings
 
 The datatype 111 is out of range, and signifies a jump instruction (see 3.2.)
 
@@ -495,6 +501,8 @@ The multi-bytes datatype has the additional operation code:
 Code	Mnemonic	Description
 000		mod			Divide and store remainder in first register
 
+However, note that cmp is undefined for the multi-bytes datatype, as the result may differ between elements.
+
 The floating-point datatype has the following additional operation codes:
 
 Code	Mnemonic	Description
@@ -509,7 +517,7 @@ The CHASMv2 cons datatype has the additional operation codes:
 
 The ccmp.[wdq] operations compare with s.a, so ccmp.[wdq]e is provided to allow direct comparison between decrement registers. It cannot be combined with any modifiers other than size.
 
-Finally, the bitwise datatype has entirely different operation codes and mnemonics:
+The bitwise datatype has entirely different operation codes and mnemonics:
 
 Code	Mnemonic	Description
 000		not			Negate second register; store in first register
@@ -519,6 +527,31 @@ Code	Mnemonic	Description
 101		or			OR and store in first register
 110		rol			Rotate left and store in first register
 111		popcount	Count number of enabled bits in second register and store in first
+
+The CHASMv2 string datatype has the following mnemonics. Note that these string operations do not use the standard QIISSSRRR instruction format for arithmetic operations, instead using QII to represent sub-operations or a third register index.
+
+Code + QII		Mnemonic		Description
+111000			strcmp r s		set L, E, G flags based on strings at *r and *s
+000000			strcpy r s		write new string at *r with contents of *s
+001ttt			strcat r s t	write new string at *r with contents of *s and *t
+010ttt			strpos r s t	set r to offset of first occurrence of *t in *s, setting flag C on failure
+011ttt			getbyte r s t	get byte at index t in *s and store in r, setting flag C on failure
+100ttt			setbyte r s t	set byte at index t in *s with value of r, setting flag C on failure
+000011			strsize r s		set r to size in memory (in words) used up by *s
+110111000		put.bli r w		write bottom 8 bits of trailing literal w at bottom 8 bits of *r
+110111111		put.bhi r w		write bottom 8 bits of trailing literal w at top 8 bits of *r
+000001			load.bl r s		get bottom 8 bits from *s and store in register r
+000010			load.bh r s		get top 8 bits from *s and store in register r
+000101			store.bl r s	overwrite bottom 8 bits at *s with bottom 8 bits of register r
+000110			store.bh r s	overwrite top 8 bits at *s with bottom 8 bits of register r
+000100			strrev r s		copy *s to r but backward
+000111							unused
+101ttt			behead r s t	write new string at *r consisting of *s without first t bytes
+
+Additionally, CHASMv2 defines synonyms for string-related operations:
+
+strlen r s := load		Get the length of string *s and store in register r
+setlen r s := store		Set the length of string *s to the value in register r
 
 
 3.1.3. Reference Flag
@@ -1066,66 +1099,22 @@ SSS value	Word Count
 1101 0000 01ss srrr ccmp.de r s
 1101 0000 10ss srrr ccmp.e r s
 
-1110 0010 00ss srrr dadd.w r s
-1110 0010 01ss srrr dadd.d r s
-1110 0010 10ss srrr dadd r s
-1110 0011 00ss srrr dadd.wr r s
-1110 0011 01ss srrr dadd.dr r s
-1110 0011 10ss srrr dadd.r r s
-1110 0010 1100 1rrr dadd.wi r <literal>
-1110 0010 1101 0rrr dadd.di r <literal>
-1110 0010 1110 0rrr dadd.i r <literal>
-1110 0011 1100 1rrr dadd.wri r <address>
-1110 0011 1101 0rrr dadd.dri r <address>
-1110 0011 1110 0rrr dadd.ri r <address>
-1110 0110 00ss srrr dsub.w r s
-1110 0110 01ss srrr dsub.d r s
-1110 0110 10ss srrr dsub r s
-1110 0111 00ss srrr dsub.wr r s
-1110 0111 01ss srrr dsub.dr r s
-1110 0111 10ss srrr dsub.r r s
-1110 0110 1100 1rrr dsub.wi r <literal>
-1110 0110 1101 0rrr dsub.di r <literal>
-1110 0110 1110 0rrr dsub.i r <literal>
-1110 0111 1100 1rrr dsub.wri r <address>
-1110 0111 1101 0rrr dsub.dri r <address>
-1110 0111 1110 0rrr dsub.ri r <address>
-1110 1000 00ss srrr dmul.w r s
-1110 1000 01ss srrr dmul.d r s
-1110 1000 10ss srrr dmul r s
-1110 1001 00ss srrr dmul.wr r s
-1110 1001 01ss srrr dmul.dr r s
-1110 1001 10ss srrr dmul.r r s
-1110 1000 1100 1rrr dmul.wi r <literal>
-1110 1000 1101 0rrr dmul.di r <literal>
-1110 1000 1110 0rrr dmul.i r <literal>
-1110 1001 1100 1rrr dmul.wri r <address>
-1110 1001 1101 0rrr dmul.dri r <address>
-1110 1001 1110 0rrr dmul.ri r <address>
-1110 1100 00ss srrr ddiv.w r s
-1110 1100 01ss srrr ddiv.d r s
-1110 1100 10ss srrr ddiv r s
-1110 1101 00ss srrr ddiv.wr r s
-1110 1101 01ss srrr ddiv.dr r s
-1110 1101 10ss srrr ddiv.r r s
-1110 1100 1100 1rrr ddiv.wi r <literal>
-1110 1100 1101 0rrr ddiv.di r <literal>
-1110 1100 1110 0rrr ddiv.i r <literal>
-1110 1101 1100 1rrr ddiv.wri r <address>
-1110 1101 1101 0rrr ddiv.dri r <address>
-1110 1101 1110 0rrr ddiv.ri r <address>
-1110 1110 00ss srrr dcmp.w r s
-1110 1110 01ss srrr dcmp.d r s
-1110 1110 10ss srrr dcmp r s
-1110 1111 00ss srrr dcmp.wr r s
-1110 1111 01ss srrr dcmp.dr r s
-1110 1111 10ss srrr dcmp.r r s
-1110 1110 1100 1rrr dcmp.wi r <literal>
-1110 1110 1101 0rrr dcmp.di r <literal>
-1110 1110 1110 0rrr dcmp.i r <literal>
-1110 1111 1100 1rrr dcmp.wri r <address>
-1110 1111 1101 0rrr dcmp.dri r <address>
-1110 1111 1110 0rrr dcmp.ri r <address>
+1110 0000 00ss srrr	strcpy r s
+1110 0000 01ss srrr	load.bl r s
+1110 0000 10ss srrr	load.bh r s
+1110 0000 11ss srrr	strsize r s
+1110 0001 00ss srrr	strrev r s
+1110 0001 01ss srrr	store.bl r s
+1110 0001 10ss srrr	store.bh r s
+1110 0001 11** ****	(unused)
+1110 001t ttss srrr	strcat r s t
+1110 010t ttss srrr	strpos r s t
+1110 011t ttss srrr	getbyte r s t
+1110 100t ttss srrr	setbyte r s t
+1110 101t ttss srrr	behead r s t
+1110 1101 1100 0rrr	put.bli r w
+1110 1101 1111 1rrr	put.bhi r w
+1110 1110 00ss srrr	strcmp r s
 
 
 3.2. Jump Instructions
@@ -1162,16 +1151,16 @@ Other values for ........ are possible but have no defined mnemonics.
 
 The repeat family instructions cause the last instruction to be executed multiple times. The CPU uses hardware to perform these loops; they are not assembler directives. Literal values cannot be incremented; they must be in registers.
 
-0011 1000 0000 RRRR	rep.n R				repeat previous instruction R times
-0011 1000 0001 RRRR	rep.wr R			repeat R times, incrementing contents of 'r' register by 1
-0011 1000 0010 RRRR	rep.ws R			repeat R times, incrementing contents of 's' register by 1
-0011 1000 0011 RRRR	rep.wrs R			repeat R times, incrementing contents of 'r' and 's' registers by 1
-0011 1000 0101 RRRR	rep.dr R			repeat R times, incrementing contents of 'r' register by 2
-0011 1000 0110 RRRR	rep.ds R			repeat R times, incrementing contents of 's' register by 2
-0011 1000 0111 RRRR	rep.drs R			repeat R times, incrementing contents of 'r' and 's' registers by 2
-0011 1000 1001 RRRR	rep.qr R			repeat R times, incrementing contents of 'r' register by 4
-0011 1000 1010 RRRR	rep.qs R			repeat R times, incrementing contents of 's' register by 4
-0011 1000 1011 RRRR	rep.qrs R			repeat R times, incrementing contents of 'r' and 's' registers by 4
+0001 1000 0000 RRRR	rep.n R				repeat previous instruction R times
+0001 1000 0001 RRRR	rep.wr R			repeat R times, incrementing contents of 'r' register by 1
+0001 1000 0010 RRRR	rep.ws R			repeat R times, incrementing contents of 's' register by 1
+0001 1000 0011 RRRR	rep.wrs R			repeat R times, incrementing contents of 'r' and 's' registers by 1
+0001 1000 0101 RRRR	rep.dr R			repeat R times, incrementing contents of 'r' register by 2
+0001 1000 0110 RRRR	rep.ds R			repeat R times, incrementing contents of 's' register by 2
+0001 1000 0111 RRRR	rep.drs R			repeat R times, incrementing contents of 'r' and 's' registers by 2
+0001 1000 1001 RRRR	rep.qr R			repeat R times, incrementing contents of 'r' register by 4
+0001 1000 1010 RRRR	rep.qs R			repeat R times, incrementing contents of 's' register by 4
+0001 1000 1011 RRRR	rep.qrs R			repeat R times, incrementing contents of 'r' and 's' registers by 4
 
 
 3.4. Special Flow Control Operations
@@ -1656,22 +1645,22 @@ The entries are structured as follows:
 
 	word 0:
 	| 2 bytes attribute bits & capabilities:
-		0x8000 = device is present?
-		0x4000 = device is ready?
-		0x2000 = device is safe to unplug?
-		0x1000 = device is working?
-		0x0800 = show device in flat memory? (writable)
+		0x8000 = device is present? (DF_PRESENT)
+		0x4000 = device is ready? (DF_READY)
+		0x2000 = device is safe to unplug? (DF_UNPLUG_SAFE)
+		0x1000 = device is working? (DF_WORKING)
+		0x0800 = show device in flat memory? (writable) (DF_IN_MEMORY)
 		0x0400 = unused
-		0x0200 = can write arbitrary memory locations
-		0x0100 = can read arbitrary memory locations
-		0x0080 = can generate device event interrupts
-		0x0040 = provides filesystem access using the HOETH controller interface
-		0x0020 = can write registers (without an interrupt)
-		0x0010 = can read registers (without an interrupt)
-		0x0008 = can accept writes to a DMA bitmap (e.g. display)
-		0x0004 = can provide a readable DMA bitmap (e.g. camera)
-		0x0002 = understands commands sent via device control interrupt (e.g. printer)
-		0x0001 = generates commands sent via device event interrupt (e.g. keyboard)
+		0x0200 = can write arbitrary memory locations (DF_CAN_WRITE_ARBITRARY)
+		0x0100 = can read arbitrary memory locations (DF_CAN_READY_ARBITRARY)
+		0x0080 = can generate device event interrupts (DF_CAN_TRIGGER)
+		0x0040 = provides filesystem access using the HOETH controller interface (DF_FILESYSTEM)
+		0x0020 = can write registers (without an interrupt) (DF_CAN_WRITE_REGISTERS)
+		0x0010 = can read registers (without an interrupt) (DF_CAN_READ_REGISTERS)
+		0x0008 = can accept writes to a DMA bitmap (e.g. display) (DF_CAN_READ_DMA)
+		0x0004 = can provide a readable DMA bitmap (e.g. camera) (DF_CAN_WRITE_DMA)
+		0x0002 = understands commands sent via device control interrupt (e.g. printer) (DF_CAN_READ_SERIAL)
+		0x0001 = generates commands sent via device event interrupt (e.g. keyboard) (DF_CAN_WRITE_SERIAL)
 	word 1:
 	| 2 bytes manufacturer ID
 		0x0000 = homebrew/prototype
@@ -1689,8 +1678,8 @@ The entries are structured as follows:
 		0x0005 = real-time clock
 		0x0010 = random number generator
 		0x0102 = ROM
-		0x0104 = serial bus
 		0x0103 = power control
+		0x0104 = serial bus
 		0x0110 = terminal
 		0x0111 = text printer
 		0x0112 = postscript printer
@@ -1915,7 +1904,7 @@ ATHARTI has two memory systems, one exposed here and another called the image bu
 
 The LOEC mouse has the device management table signature:
 
-	e085 0001 0120 01e0
+	e083 0001 0120 01e0
 	0000 0000 0000 0000
 	0000 0000 0000 0000
 	0000 0000 0000 0000

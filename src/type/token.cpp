@@ -115,18 +115,22 @@ link<token>* add_token(link<token>* last_token, char* raw_text, fpos_t word_star
 	// printf("<%s type %i>\n", new_token->child->text, new_token->child->type); //.chars());
 
 	if(token_type == TK_LIT_STRING) {
-		unsigned short len = word_end - word_start + 1;
-		unsigned short alen = len + 2; // 2 lead for length + no tail
+		unsigned long long len = word_end - word_start + 1;
+		unsigned long long alen = len + 8; // 2 lead for length + no tail
 		if(len % 2) ++alen;
-		new_token->child->output = (char*)malloc(alen);
+		new_token->child->output = (char*)calloc(alen, sizeof(char));
 		new_token->child->output_size = alen;
-		strncpy(new_token->child->output + 2, new_token->child->text, len);
-		if(len % 2)
-			new_token->child->output[2 + len] = 0; // avoid junk at the end
-		new_token->child->output[0] = (len >> 8) & 0xff;
-		new_token->child->output[1] = (len) & 0xff;
-		size_t retlen = ((new_token->child->output[0]) << 8) + (new_token->child->output[1]);
-		printf("created TK_STRING output with content length %i for source string '%s'\n", retlen, new_token->child->text);
+		strncpy(new_token->child->output + 8, new_token->child->text, len);
+		new_token->child->output[0] = (len >> 56) & 0xff;
+		new_token->child->output[1] = (len >> 48) & 0xff;
+		new_token->child->output[2] = (len >> 40) & 0xff;
+		new_token->child->output[3] = (len >> 32) & 0xff;
+		new_token->child->output[4] = (len >> 24) & 0xff;
+		new_token->child->output[5] = (len >> 16) & 0xff;
+		new_token->child->output[6] = (len >>  8) & 0xff;
+		new_token->child->output[7] = (len >>  0) & 0xff;
+		// size_t retlen = ((new_token->child->output[0]) << 8) + (new_token->child->output[1]);
+		printf("created TK_STRING output with content length %i for source string '%s'\n", len, new_token->child->text);
 	}
 	
 	if(last_token != NULL)

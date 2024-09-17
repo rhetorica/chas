@@ -58,13 +58,16 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "cdr",     0x0B00, O_MONO | O_DUO | O_STATUS_FORBIDDEN);
     last_opcode = add_opcode(last_opcode, n++, "flip",    0x0B0F, O_DUO_ONLY);
     last_opcode = add_opcode(last_opcode, n++, "copy",    0x0C00, O_MONO | O_DUO);
+    /* // removed BCD support:
     last_opcode = add_opcode(last_opcode, n++, "unpack",  0x0D00, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "pack",    0x0E00, O_MONO | O_DUO);
+    */
     last_opcode = add_opcode(last_opcode, n++, "swap",    0x0F00, O_MONO | O_DUO);
 
     last_opcode = add_opcode(last_opcode, n++, "load.w",  0x1000, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "load.d",  0x1100, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "load",    0x1200, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "strlen",  0x1200, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "load.wi", 0x1310, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "load.di", 0x1320, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "load.i",  0x1340, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
@@ -78,6 +81,7 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "store.w", 0x1400, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "store.d", 0x1500, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "store",   0x1600, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "setlen",  0x1600, O_MONO | O_DUO);
     last_opcode = add_opcode(last_opcode, n++, "store.wi",0x1710, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "store.di",0x1720, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "store.i", 0x1740, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
@@ -739,7 +743,25 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "ccmp.we",  0xD000, O_ARITHMETIC_DUO);
     last_opcode = add_opcode(last_opcode, n++, "ccmp.de",  0xD040, O_ARITHMETIC_DUO);
     last_opcode = add_opcode(last_opcode, n++, "ccmp.e",   0xD080, O_ARITHMETIC_DUO);
-	
+
+    last_opcode = add_opcode(last_opcode, n++, "strcpy",   0xE000, O_ARITHMETIC_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "load.bl",  0xE040, O_ARITHMETIC_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "load.bh",  0xE080, O_ARITHMETIC_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "strsize",  0xE0C0, O_ARITHMETIC_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "strrev",   0xE100, O_ARITHMETIC_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "store.bl", 0xE140, O_ARITHMETIC_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "store.bh", 0xE180, O_ARITHMETIC_DUO);
+    // last_opcode = add_opcode(last_opcode, n++, "???",   0xE1C0, O_ARITHMETIC_DUO); // unused
+    last_opcode = add_opcode(last_opcode, n++, "strcat",   0xE200, O_ARITHMETIC_TRIO);
+    last_opcode = add_opcode(last_opcode, n++, "strpos",   0xE400, O_ARITHMETIC_TRIO);
+    last_opcode = add_opcode(last_opcode, n++, "getbyte",  0xE600, O_ARITHMETIC_TRIO);
+    last_opcode = add_opcode(last_opcode, n++, "setbyte",  0xE800, O_ARITHMETIC_TRIO);
+    last_opcode = add_opcode(last_opcode, n++, "behead",   0xEA00, O_ARITHMETIC_TRIO);
+    last_opcode = add_opcode(last_opcode, n++, "put.bli",  0xEDC0, O_ARITHMETIC_LIT | O_LIT_16);
+    last_opcode = add_opcode(last_opcode, n++, "put.bhi",  0xEDF8, O_ARITHMETIC_LIT | O_LIT_16);
+    last_opcode = add_opcode(last_opcode, n++, "strcmp",   0xEE00, O_ARITHMETIC_DUO);
+
+/*	// removed BCD support:
     last_opcode = add_opcode(last_opcode, n++, "dadd.w",   0xE200, O_ARITHMETIC_DUO);
     last_opcode = add_opcode(last_opcode, n++, "dadd.d",   0xE240, O_ARITHMETIC_DUO);
     last_opcode = add_opcode(last_opcode, n++, "dadd",     0xE280, O_ARITHMETIC_DUO);
@@ -809,7 +831,7 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "dcmp.wri", 0xEFC8, O_ARITHMETIC_LIT | O_LIT_REF | O_LIT_64);
     last_opcode = add_opcode(last_opcode, n++, "dcmp.dri", 0xEFD0, O_ARITHMETIC_LIT | O_LIT_REF | O_LIT_64);
     last_opcode = add_opcode(last_opcode, n++, "dcmp.ri",  0xEFE0, O_ARITHMETIC_LIT | O_LIT_REF | O_LIT_64);
-
+*/
     /*
     // original design (QQQQQRRRR) arithmetic opcodes:
     // unsigned
