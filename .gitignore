@@ -1,3 +1,6 @@
 /build/
 *.o
 *.exe
+doc/old-text.txt
+doc/opcode-list-v1.txt
+LICENSE.md
