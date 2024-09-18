@@ -116,19 +116,37 @@ link<token>* add_token(link<token>* last_token, char* raw_text, fpos_t word_star
 
 	if(token_type == TK_LIT_STRING) {
 		unsigned long long len = word_end - word_start + 1;
+
+
 		unsigned long long alen = len + 8; // 2 lead for length + no tail
 		if(len % 2) ++alen;
 		new_token->child->output = (char*)calloc(alen, sizeof(char));
-		new_token->child->output_size = alen;
-		strncpy(new_token->child->output + 8, new_token->child->text, len);
-		new_token->child->output[0] = (len >> 56) & 0xff;
-		new_token->child->output[1] = (len >> 48) & 0xff;
-		new_token->child->output[2] = (len >> 40) & 0xff;
-		new_token->child->output[3] = (len >> 32) & 0xff;
-		new_token->child->output[4] = (len >> 24) & 0xff;
-		new_token->child->output[5] = (len >> 16) & 0xff;
-		new_token->child->output[6] = (len >>  8) & 0xff;
-		new_token->child->output[7] = (len >>  0) & 0xff;
+		// new_token->child->output_size = alen;
+
+		// process remaining escape codes:
+		unsigned long long li = 0;
+		unsigned long long oli = 0;
+		while(li < len) {
+			new_token->child->output[8 + oli] = new_token->child->text[li];
+			if(new_token->child->text[li] == '\\' && new_token->child->text[li+1] == 'n') {
+				++li;
+				new_token->child->output[8 + oli] = '\n';
+			}
+			++li;
+			++oli;
+		}
+		
+		
+		// strncpy(new_token->child->output + 8, new_token->child->text, len);
+		new_token->child->output[0] = (oli >> 56) & 0xff;
+		new_token->child->output[1] = (oli >> 48) & 0xff;
+		new_token->child->output[2] = (oli >> 40) & 0xff;
+		new_token->child->output[3] = (oli >> 32) & 0xff;
+		new_token->child->output[4] = (oli >> 24) & 0xff;
+		new_token->child->output[5] = (oli >> 16) & 0xff;
+		new_token->child->output[6] = (oli >>  8) & 0xff;
+		new_token->child->output[7] = (oli >>  0) & 0xff;
+		new_token->child->output_size = 8 + oli + (oli % 2);
 		// size_t retlen = ((new_token->child->output[0]) << 8) + (new_token->child->output[1]);
 		printf("created TK_STRING output with content length %i for source string '%s'\n", len, new_token->child->text);
 	}
