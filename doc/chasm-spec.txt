@@ -14,7 +14,7 @@
                                Pharos Computer Inc
 
                                Created: 2024-08-19
-                               Updated: 2024-09-16
+                               Updated: 2024-09-18
 
 
 
@@ -342,84 +342,84 @@ R, S, T: registers, but 1111 is reserved (usually means load a trailing literal)
 *: ignored
 ?: any (for specifying groups of instructions; both possibilities defined)
 
-Bitmask				CHAS Mnemonic		Description
-0000 0000 **** ****	null				do nothing
-0000 0001 1000 RRRR	push R				push register r, or literal
-0000 0001 0100 RRRR	push.d R			push lower half of register r (double word), or literal
-0000 0001 0010 RRRR	push.w R			push lower quarter of register r (16-bit word), or literal
-0000 0010 1000 rrrr	pop r				pop register r
-0000 0010 0100 rrrr	pop.d r				pop lower half of register r (double word)
-0000 0010 0010 rrrr	pop.w r				pop lower quarter register r (16-bit word)
-0000 0001 0011 1111	push.a				push all registers to stack
-0000 0010 0011 1111	pop.a				pop all registers from stack
-0000 0001 0001 1111	push.h				push all data registers (a-h) to stack
-0000 0010 0001 1111	pop.h				pop all data registers (a-h) from stack
-0000 0011 **** **** 					unused
-0000 0100 **11 RRRR	load.a R			load all registers from (void*)r (or from literal address if R is 1111)
-0000 0100 **01 RRRR	load.h R			load all data registers (a-h) from (void*)r (or from literal address if R is 1111)
-0000 0101 **** **** 					unused
-0000 0110 **** ****						unused
-0000 0111 **** ****						unused
-0000 1000 **11 RRRR	store.a R			store all registers at (void*)r (or at literal address if R is 1111)
-0000 1000 **01 RRRR	store.h R			store all data registers (a-h) to (void*)r (or at literal address if R is 1111)
-0000 1001 **** **** 					unused
-0000 1010 **** ****						unused
-0000 1011 ssss rrrr cdr r s				CHASMv2 get s.d and store in r.a (CONS shadow decrement register)
-										 -- if r is 'status', becomes `flip s` #NEW#
-0000 1011 ssss 1111 flip s				CHASMv2 swap value of s.a and s.d (CONS shadow decrement register)
-0000 1100 ssss rrrr	copy r s			copy value from s into r
-0000 1101 ssss rrrr	unused
-0000 1110 ssss rrrr	unused
-0000 1111 ssss rrrr	swap r s			swap values of r and s registers
+Word	Bitmask				CHAS Mnemonic		Description
+00**	0000 0000 **** ****	null				do nothing
+018R	0000 0001 1000 RRRR	push R				push register r, or literal
+014R	0000 0001 0100 RRRR	push.d R			push lower half of register r (double word), or literal
+012R	0000 0001 0010 RRRR	push.w R			push lower quarter of register r (16-bit word), or literal
+028r	0000 0010 1000 rrrr	pop r				pop register r
+024r	0000 0010 0100 rrrr	pop.d r				pop lower half of register r (double word)
+022r	0000 0010 0010 rrrr	pop.w r				pop lower quarter register r (16-bit word)
+013f	0000 0001 0011 1111	push.a				push all registers to stack except pc
+023f	0000 0010 0011 1111	pop.a				pop all registers from stack except pc
+011f	0000 0001 0001 1111	push.h				push all data registers (a-h) to stack
+021f	0000 0010 0001 1111	pop.h				pop all data registers (a-h) from stack
+03**	0000 0011 **** **** 					unused
+043R	0000 0100 **11 RRRR	load.a R			load all registers from (void*)r (or from literal address if R is 1111)
+041R	0000 0100 **01 RRRR	load.h R			load all data registers (a-h) from (void*)r (or from literal address if R is 1111)
+05**	0000 0101 **** **** 					unused
+06**	0000 0110 **** ****						unused
+07**	0000 0111 **** ****						unused
+083R	0000 1000 **11 RRRR	store.a R			store all registers at (void*)r (or at literal address if R is 1111)
+081R	0000 1000 **01 RRRR	store.h R			store all data registers (a-h) to (void*)r (or at literal address if R is 1111)
+09**	0000 1001 **** **** 					unused
+0a**	0000 1010 **** ****						unused
+0bsr	0000 1011 ssss rrrr cdr r s				CHASMv2 get s.d and store in r.a (CONS shadow decrement register)
+												-- if r is 'status', becomes `flip s` #NEW#
+0bsf	0000 1011 ssss 1111 flip s				CHASMv2 swap value of s.a and s.d (CONS shadow decrement register)
+0csr	0000 1100 ssss rrrr	copy r s			copy value from s into r
+0dsr	0000 1101 ssss rrrr	unused
+0esr	0000 1110 ssss rrrr	unused
+0fsr	0000 1111 ssss rrrr	swap r s			swap values of r and s registers
 
-0001 0000 ssss rrrr load.w r s			load 16 bits from (void*)s into r
-0001 0001 ssss rrrr load.d r s			load 32 bits from (void*)s into r
-0001 0010 ssss rrrr load r s			load 64 bits from (void*)s into r
-0001 0011 0001 rrrr load.wi r <address>	load 64-bit literal as address and get 16 bits to put in r
-0001 0011 0010 rrrr load.di r <address>	load 64-bit literal as address and get 32 bits to put in r
-0001 0011 0100 rrrr load.i r <address>	load 64-bit literal as address and get 64 bits to put in r
-0001 0011 1001 rrrr set.w r <value>		load 16-bit literal into the bottom 16 bits of r
-0001 0011 1010 rrrr set.d r <value>		load 32-bit literal into the bottom 32 bits of r
-0001 0011 1100 rrrr set r <value>		load 64-bit literal into register r
-0001 0011 1111 0rrr set.c r <value>		CHASMv2 load 64-bit literal into r.d (r must be a-h)
-0001 0011 1111 0rrr setcdr.i r <value>	CHAS synonym of set.c
-0001 0100 ssss rrrr store.w r s			store 16 bits to (void*)s from r
-0001 0101 ssss rrrr store.d r s			store 32 bits to (void*)s from r
-0001 0110 ssss rrrr store r s			store 64 bits to (void*)s from r
-0001 0111 0001 rrrr store.wi r <addr>	load 64-bit literal as address and store 16 bits from r
-0001 0111 0010 rrrr store.di r <addr>	load 64-bit literal as address and store 32 bits from r
-0001 0111 0100 rrrr store.i r <address>	load 64-bit literal as address and store 64 bits from r
+10sr	0001 0000 ssss rrrr load.w r s			load 16 bits from (void*)s into r
+11sr	0001 0001 ssss rrrr load.d r s			load 32 bits from (void*)s into r
+12sr	0001 0010 ssss rrrr load r s			load 64 bits from (void*)s into r
+131r	0001 0011 0001 rrrr load.wi r <address>	load 64-bit literal as address and get 16 bits to put in r
+132r	0001 0011 0010 rrrr load.di r <address>	load 64-bit literal as address and get 32 bits to put in r
+134r	0001 0011 0100 rrrr load.i r <address>	load 64-bit literal as address and get 64 bits to put in r
+139r	0001 0011 1001 rrrr set.w r <value>		load 16-bit literal into the bottom 16 bits of r
+13ar	0001 0011 1010 rrrr set.d r <value>		load 32-bit literal into the bottom 32 bits of r
+13cr	0001 0011 1100 rrrr set r <value>		load 64-bit literal into register r
+13fr	0001 0011 1111 0rrr set.c r <value>		CHASMv2 load 64-bit literal into r.d (r must be a-h)
+13fr	0001 0011 1111 0rrr setcdr.i r <value>	CHAS synonym of set.c
+14sr	0001 0100 ssss rrrr store.w r s			store 16 bits to (void*)s from r
+15sr	0001 0101 ssss rrrr store.d r s			store 32 bits to (void*)s from r
+16sr	0001 0110 ssss rrrr store r s			store 64 bits to (void*)s from r
+171r	0001 0111 0001 rrrr store.wi r <addr>	load 64-bit literal as address and store 16 bits from r
+172r	0001 0111 0010 rrrr store.di r <addr>	load 64-bit literal as address and store 32 bits from r
+174r	0001 0111 0100 rrrr store.i r <address>	load 64-bit literal as address and store 64 bits from r
 
-0001 1000 ???? ????						'rep' instructions (see 3.3.)
+18??	0001 1000 ???? ????						'rep' instructions (see 3.3.)
 
-0001 1001 SSSS 0rrr	load.c r S			CHASMv2 load 64 bits from (void*)s into r.d (r must be a-h) #NEW#
-0001 1010 SSSS 0rrr	store.c r S			CHASMv2 store 64 bits to (void*)s from r.d (r must be a-h) #NEW#
-0001 1001 1111 0rrr	load.ci r <addr>	CHASMv2 load 64 bits from <addr> into r.d (r must be a-h) #NEW#
-0001 1010 1111 0rrr	store.ci r <addr>	CHASMv2 store 64 bits to <addr> from r.d (r must be a-h) #NEW#
-0001 1101 SSSS 0rrr	load.o r S			CHASMv2 load 128 bits from (void*)s into r and r.d (r must be a-h) #NEW#
-0001 1101 SSSS 0rrr	follow.a r S		CHAS synonym for load.o
-0001 1110 SSSS 0rrr	store.o r S			CHASMv2 store 128 bits to (void*)s from r and r.d (r must be a-h) #NEW#
-0001 1101 1111 0rrr	load.oi r <addr>	CHASMv2 load 128 bits from <addr> into r and r.d (r must be a-h) #NEW#
-0001 1110 1111 0rrr	store.oi r <addr>	CHASMv2 store 128 bits to <addr> from r and r.d (r must be a-h) #NEW#
-0001 1100 SSSS 0rrr	load.co r S			CHASMv2 load 128 bits from (void*)s.d into r and r.d (r must be a-h) #NEW#
-0001 1100 SSSS 0rrr	follow.d r S		CHAS synonym for load.co
-0001 1111 SSSS 0rrr	store.co r S		CHASMv2 store 128 bits to (void*)s.d from r and r.d (r must be a-h) #NEW#
-0001 1011 SSSS 0rrr	setcdr r S			CHASMv2 copy value of s.a into r.d (r must be a-h) #NEW#
+19Sr	0001 1001 SSSS 0rrr	load.c r S			CHASMv2 load 64 bits from (void*)s into r.d (r must be a-h) #NEW#
+1aSr	0001 1010 SSSS 0rrr	store.c r S			CHASMv2 store 64 bits to (void*)s from r.d (r must be a-h) #NEW#
+19fr	0001 1001 1111 0rrr	load.ci r <addr>	CHASMv2 load 64 bits from <addr> into r.d (r must be a-h) #NEW#
+1afr	0001 1010 1111 0rrr	store.ci r <addr>	CHASMv2 store 64 bits to <addr> from r.d (r must be a-h) #NEW#
+1dSr	0001 1101 SSSS 0rrr	load.o r S			CHASMv2 load 128 bits from (void*)s into r and r.d (r must be a-h) #NEW#
+1dSr	0001 1101 SSSS 0rrr	follow.a r S		CHAS synonym for load.o
+1eSr	0001 1110 SSSS 0rrr	store.o r S			CHASMv2 store 128 bits to (void*)s from r and r.d (r must be a-h) #NEW#
+1dfr	0001 1101 1111 0rrr	load.oi r <addr>	CHASMv2 load 128 bits from <addr> into r and r.d (r must be a-h) #NEW#
+1efr	0001 1110 1111 0rrr	store.oi r <addr>	CHASMv2 store 128 bits to <addr> from r and r.d (r must be a-h) #NEW#
+1cSr	0001 1100 SSSS 0rrr	load.co r S			CHASMv2 load 128 bits from (void*)s.d into r and r.d (r must be a-h) #NEW#
+1cSr	0001 1100 SSSS 0rrr	follow.d r S		CHAS synonym for load.co
+1fSr	0001 1111 SSSS 0rrr	store.co r S		CHASMv2 store 128 bits to (void*)s.d from r and r.d (r must be a-h) #NEW#
+1bSr	0001 1011 SSSS 0rrr	setcdr r S			CHASMv2 copy value of s.a into r.d (r must be a-h) #NEW#
 
 
-0010 00vv vvvv rrrr	disable r v			clear bit v in r
-0010 01vv vvvv rrrr	enable r v			set bit v in r
-0010 1??? ???? ????						debugging functions (see 3.5.)
+2vvr	0010 00vv vvvv rrrr	disable r v			clear bit v in r
+2vvr	0010 01vv vvvv rrrr	enable r v			set bit v in r
+2???	0010 1??? ???? ????						debugging functions (see 3.5.)
 
-0011 TTTT ssss rrrr	update r s T		Store 64-bit value from (void*) s in r. If (void*)s is <= T, set to T. #NEW#
+3Tsr	0011 TTTT ssss rrrr	update r s T		Store 64-bit value from (void*) s in r. If (void*)s is <= T, set to T. #NEW#
 
-0100 ???? ???? ????						positive jump instructions (see 3.2.)
-0101 TTTT ssss rrrr	bcopy r s T			copy T words from (void*)r to (void*)s (if T = 1111, read qword literal)
-0110 ???? ???? ????						negative jump instructions (see 3.2.)
-0111 TTTT ssss rrrr	bfill r s T			fill T words at (void*)s with contents of r (if T = 1111, read qword literal)
+4???	0100 ???? ???? ????						positive jump instructions (see 3.2.)
+5Tsr	0101 TTTT ssss rrrr	bcopy r s T			copy T words from (void*)r to (void*)s (if T = 1111, read qword literal)
+6Tsr	0110 ???? ???? ????						negative jump instructions (see 3.2.)
+7Tsr	0111 TTTT ssss rrrr	bfill r s T			fill T words at (void*)s with contents of r (if T = 1111, read qword literal)
 
-1??? ???? ???? ????						arithmetic instructions (see 3.1.)
-1111 ???? ???? ???? 					kernel group (see 3.4.)
+????	1??? ???? ???? ????						arithmetic instructions (see 3.1.)
+f???	1111 ???? ???? ???? 					kernel group (see 3.4.)
 
 
 3.1. Arithmetic Instructions
@@ -455,16 +455,16 @@ It is not usually necessary to type the "i" flag to the assembler; it will be in
 
 The datatypes are:
 
-Code	Abbreviation	Description
-000		n/a				unsigned integer
-001		s 				signed integer
-010		b 				multi-bytes
-011		f 				floating-point
-100		n/a 			bitwise
-101		c 				CHASMv2 cons (unsigned integer in .d partition)
-110		n/a				CHASMv2 strings
+Hex	Code	Abbreviation	Description
+8	000		n/a				unsigned integer
+9	001		s 				signed integer
+a	010		b 				multi-bytes
+b	011		f 				floating-point
+c	100		n/a 			bitwise
+d	101		c 				CHASMv2 cons (unsigned integer in .d partition)
+e	110		n/a				CHASMv2 strings
 
-The datatype 111 is out of range, and signifies a jump instruction (see 3.2.)
+The datatype f/111 is out of range, and signifies a jump instruction (see 3.2.)
 
 For a complete description of each datatype, see 2.1.
 
@@ -473,60 +473,61 @@ For a complete description of each datatype, see 2.1.
 
 The operation codes for most datatypes are:
 
-Code	Mnemonic	Description
-001		add			Add and store in first register
-011		sub 		Subtract and store in first register
-100		mul 		Multiply and store in first register
-110		div 		Divide and store in first register
-111		cmp 		Compare (set status bits C, L, E, G, Z, S)
+Hex	Code	Mnemonic	Description
+2/3	001		add			Add and store in first register
+6/7	011		sub 		Subtract and store in first register
+8/9	100		mul 		Multiply and store in first register
+c/d	110		div 		Divide and store in first register
+e/f	111		cmp 		Compare (set status bits C, L, E, G, Z, S)
 
 The cmp operation is not defined for the multi-bytes or bitwise datatypes.
 
 The unsigned integer datatype has the following additional operation codes:
 
-Code	Mnemonic	Description
-000		mod			Divide and store remainder in first register
-010		lsh			Left shift and store in first register
-101		rsh			Right shift and store in first register
+Hex	Code	Mnemonic	Description
+0/1	000		mod			Divide and store remainder in first register
+4/5	010		lsh			Left shift and store in first register
+a/b	101		rsh			Right shift and store in first register
 
 The signed integer datatype has the additional operation codes:
 
-Code	Mnemonic	Description
-000		mod			Divide and store remainder in first register
-010		lsh			Sign-extend left shift and store in first register
-101		rsh			Sign-extend right shift and store in first register
+Hex	Code	Mnemonic	Description
+0/1	000		mod			Divide and store remainder in first register
+4/5	010		lsh			Sign-extend left shift and store in first register
+a/b	101		rsh			Sign-extend right shift and store in first register
 
 The multi-bytes datatype has the additional operation code:
 
-Code	Mnemonic	Description
-000		mod			Divide and store remainder in first register
+Hex	Code	Mnemonic	Description
+0/1	000		mod			Divide and store remainder in first register
 
 However, note that cmp is undefined for the multi-bytes datatype, as the result may differ between elements.
 
 The floating-point datatype has the following additional operation codes:
 
-Code	Mnemonic	Description
-010		pow			Raise to exponent and store in first register
-101		log			Take logarithm of first operand using second as base and store in first register
+Hex	Code	Mnemonic	Description
+4/5	010		pow			Raise to exponent and store in first register
+a/b	101		log			Take logarithm of first operand using second as base and store in first register
 
 The CHASMv2 cons datatype has the additional operation codes:
 
-000		cmp.e		Compare r.d with s.d
-010		lsh			Left shift and store in first register
-101		rsh			Right shift and store in first register
+Hex	Code	Mnemonic	Description
+0/1	000		cmp.e		Compare r.d with s.d
+4/5	010		lsh			Left shift and store in first register
+a/b	101		rsh			Right shift and store in first register
 
 The ccmp.[wdq] operations compare with s.a, so ccmp.[wdq]e is provided to allow direct comparison between decrement registers. It cannot be combined with any modifiers other than size.
 
 The bitwise datatype has entirely different operation codes and mnemonics:
 
-Code	Mnemonic	Description
-000		not			Negate second register; store in first register
-001		xor			XOR first register with second register; store in first register
-011		ror			Rotate right and store in first register
-100		and			AND and store in first register
-101		or			OR and store in first register
-110		rol			Rotate left and store in first register
-111		popcount	Count number of enabled bits in second register and store in first
+Hex	Code	Mnemonic	Description
+0/1	000		not			Negate second register; store in first register
+2/3	001		xor			XOR first register with second register; store in first register
+6/7	011		ror			Rotate right and store in first register
+8/9	100		and			AND and store in first register
+a/b	101		or			OR and store in first register
+c/d	110		rol			Rotate left and store in first register
+e/f	111		popcount	Count number of enabled bits in second register and store in first
 
 The CHASMv2 string datatype has the following mnemonics. Note that these string operations do not use the standard QIISSSRRR instruction format for arithmetic operations, instead using QII to represent sub-operations or a third register index.
 
@@ -586,562 +587,562 @@ SSS value	Word Count
 
 3.1.6. Complete List of Arithmetic Instructions
 
-1000 0000 00ss srrr mod.w r s
-1000 0000 01ss srrr mod.d r s
-1000 0000 10ss srrr mod r s
-1000 0001 00ss srrr mod.wr r s
-1000 0001 01ss srrr mod.dr r s
-1000 0001 10ss srrr mod.r r s
-1000 0000 1100 1rrr mod.wi r <literal>
-1000 0000 1101 0rrr mod.di r <literal>
-1000 0000 1110 0rrr mod.i r <literal>
-1000 0001 1100 1rrr mod.wri r <address>
-1000 0001 1101 0rrr mod.dri r <address>
-1000 0001 1110 0rrr mod.ri r <address>
-1000 0010 00ss srrr add.w r s
-1000 0010 01ss srrr add.d r s
-1000 0010 10ss srrr add r s
-1000 0011 00ss srrr add.wr r s
-1000 0011 01ss srrr add.dr r s
-1000 0011 10ss srrr add.r r s
-1000 0010 1100 1rrr add.wi r <literal>
-1000 0010 1101 0rrr add.di r <literal>
-1000 0010 1110 0rrr add.i r <literal>
-1000 0011 1100 1rrr add.wri r <address>
-1000 0011 1101 0rrr add.dri r <address>
-1000 0011 1110 0rrr add.ri r <address>
-1000 0100 00ss srrr lsh.w r s
-1000 0100 01ss srrr lsh.d r s
-1000 0100 10ss srrr lsh r s
-1000 0101 00ss srrr lsh.wr r s
-1000 0101 01ss srrr lsh.dr r s
-1000 0101 10ss srrr lsh.r r s
-1000 0100 1100 1rrr lsh.wi r <literal>
-1000 0100 1101 0rrr lsh.di r <literal>
-1000 0100 1110 0rrr lsh.i r <literal>
-1000 0101 1100 1rrr lsh.wri r <address>
-1000 0101 1101 0rrr lsh.dri r <address>
-1000 0101 1110 0rrr lsh.ri r <address>
-1000 0110 00ss srrr sub.w r s
-1000 0110 01ss srrr sub.d r s
-1000 0110 10ss srrr sub r s
-1000 0111 00ss srrr sub.wr r s
-1000 0111 01ss srrr sub.dr r s
-1000 0111 10ss srrr sub.r r s
-1000 0110 1100 1rrr sub.wi r <literal>
-1000 0110 1101 0rrr sub.di r <literal>
-1000 0110 1110 0rrr sub.i r <literal>
-1000 0111 1100 1rrr sub.wri r <address>
-1000 0111 1101 0rrr sub.dri r <address>
-1000 0111 1110 0rrr sub.ri r <address>
-1000 1000 00ss srrr mul.w r s
-1000 1000 01ss srrr mul.d r s
-1000 1000 10ss srrr mul r s
-1000 1001 00ss srrr mul.wr r s
-1000 1001 01ss srrr mul.dr r s
-1000 1001 10ss srrr mul.r r s
-1000 1000 1100 1rrr mul.wi r <literal>
-1000 1000 1101 0rrr mul.di r <literal>
-1000 1000 1110 0rrr mul.i r <literal>
-1000 1001 1100 1rrr mul.wri r <address>
-1000 1001 1101 0rrr mul.dri r <address>
-1000 1001 1110 0rrr mul.ri r <address>
-1000 1010 00ss srrr rsh.w r s
-1000 1010 01ss srrr rsh.d r s
-1000 1010 10ss srrr rsh r s
-1000 1011 00ss srrr rsh.wr r s
-1000 1011 01ss srrr rsh.dr r s
-1000 1011 10ss srrr rsh.r r s
-1000 1010 1100 1rrr rsh.wi r <literal>
-1000 1010 1101 0rrr rsh.di r <literal>
-1000 1010 1110 0rrr rsh.i r <literal>
-1000 1011 1100 1rrr rsh.wri r <address>
-1000 1011 1101 0rrr rsh.dri r <address>
-1000 1011 1110 0rrr rsh.ri r <address>
-1000 1100 00ss srrr div.w r s
-1000 1100 01ss srrr div.d r s
-1000 1100 10ss srrr div r s
-1000 1101 00ss srrr div.wr r s
-1000 1101 01ss srrr div.dr r s
-1000 1101 10ss srrr div.r r s
-1000 1100 1100 1rrr div.wi r <literal>
-1000 1100 1101 0rrr div.di r <literal>
-1000 1100 1110 0rrr div.i r <literal>
-1000 1101 1100 1rrr div.wri r <address>
-1000 1101 1101 0rrr div.dri r <address>
-1000 1101 1110 0rrr div.ri r <address>
-1000 1110 00ss srrr cmp.w r s
-1000 1110 01ss srrr cmp.d r s
-1000 1110 10ss srrr cmp r s
-1000 1111 00ss srrr cmp.wr r s
-1000 1111 01ss srrr cmp.dr r s
-1000 1111 10ss srrr cmp.r r s
-1000 1110 1100 1rrr cmp.wi r <literal>
-1000 1110 1101 0rrr cmp.di r <literal>
-1000 1110 1110 0rrr cmp.i r <literal>
-1000 1111 1100 1rrr cmp.wri r <address>
-1000 1111 1101 0rrr cmp.dri r <address>
-1000 1111 1110 0rrr cmp.ri r <address>
+80sr	1000 0000 00ss srrr mod.w r s
+80sr	1000 0000 01ss srrr mod.d r s
+80sr	1000 0000 10ss srrr mod r s
+81sr	1000 0001 00ss srrr mod.wr r s
+81sr	1000 0001 01ss srrr mod.dr r s
+81sr	1000 0001 10ss srrr mod.r r s
+80cr	1000 0000 1100 1rrr mod.wi r <literal>
+80dr	1000 0000 1101 0rrr mod.di r <literal>
+80er	1000 0000 1110 0rrr mod.i r <literal>
+81cr	1000 0001 1100 1rrr mod.wri r <address>
+81dr	1000 0001 1101 0rrr mod.dri r <address>
+81er	1000 0001 1110 0rrr mod.ri r <address>
+82sr	1000 0010 00ss srrr add.w r s
+82sr	1000 0010 01ss srrr add.d r s
+82sr	1000 0010 10ss srrr add r s
+83sr	1000 0011 00ss srrr add.wr r s
+83sr	1000 0011 01ss srrr add.dr r s
+83sr	1000 0011 10ss srrr add.r r s
+82cr	1000 0010 1100 1rrr add.wi r <literal>
+82dr	1000 0010 1101 0rrr add.di r <literal>
+82er	1000 0010 1110 0rrr add.i r <literal>
+83cr	1000 0011 1100 1rrr add.wri r <address>
+83dr	1000 0011 1101 0rrr add.dri r <address>
+83er	1000 0011 1110 0rrr add.ri r <address>
+84sr	1000 0100 00ss srrr lsh.w r s
+84sr	1000 0100 01ss srrr lsh.d r s
+84sr	1000 0100 10ss srrr lsh r s
+85sr	1000 0101 00ss srrr lsh.wr r s
+85sr	1000 0101 01ss srrr lsh.dr r s
+85sr	1000 0101 10ss srrr lsh.r r s
+84cr	1000 0100 1100 1rrr lsh.wi r <literal>
+84dr	1000 0100 1101 0rrr lsh.di r <literal>
+84er	1000 0100 1110 0rrr lsh.i r <literal>
+85cr	1000 0101 1100 1rrr lsh.wri r <address>
+85dr	1000 0101 1101 0rrr lsh.dri r <address>
+85er	1000 0101 1110 0rrr lsh.ri r <address>
+86sr	1000 0110 00ss srrr sub.w r s
+86sr	1000 0110 01ss srrr sub.d r s
+86sr	1000 0110 10ss srrr sub r s
+87sr	1000 0111 00ss srrr sub.wr r s
+87sr	1000 0111 01ss srrr sub.dr r s
+87sr	1000 0111 10ss srrr sub.r r s
+86cr	1000 0110 1100 1rrr sub.wi r <literal>
+86dr	1000 0110 1101 0rrr sub.di r <literal>
+86er	1000 0110 1110 0rrr sub.i r <literal>
+87cr	1000 0111 1100 1rrr sub.wri r <address>
+87dr	1000 0111 1101 0rrr sub.dri r <address>
+87er	1000 0111 1110 0rrr sub.ri r <address>
+88sr	1000 1000 00ss srrr mul.w r s
+88sr	1000 1000 01ss srrr mul.d r s
+88sr	1000 1000 10ss srrr mul r s
+89sr	1000 1001 00ss srrr mul.wr r s
+89sr	1000 1001 01ss srrr mul.dr r s
+89sr	1000 1001 10ss srrr mul.r r s
+88cr	1000 1000 1100 1rrr mul.wi r <literal>
+88dr	1000 1000 1101 0rrr mul.di r <literal>
+88er	1000 1000 1110 0rrr mul.i r <literal>
+89cr	1000 1001 1100 1rrr mul.wri r <address>
+89dr	1000 1001 1101 0rrr mul.dri r <address>
+89er	1000 1001 1110 0rrr mul.ri r <address>
+8asr	1000 1010 00ss srrr rsh.w r s
+8asr	1000 1010 01ss srrr rsh.d r s
+8asr	1000 1010 10ss srrr rsh r s
+8bsr	1000 1011 00ss srrr rsh.wr r s
+8bsr	1000 1011 01ss srrr rsh.dr r s
+8bsr	1000 1011 10ss srrr rsh.r r s
+8acr	1000 1010 1100 1rrr rsh.wi r <literal>
+8adr	1000 1010 1101 0rrr rsh.di r <literal>
+8aer	1000 1010 1110 0rrr rsh.i r <literal>
+8bcr	1000 1011 1100 1rrr rsh.wri r <address>
+8bdr	1000 1011 1101 0rrr rsh.dri r <address>
+8ber	1000 1011 1110 0rrr rsh.ri r <address>
+8csr	1000 1100 00ss srrr div.w r s
+8csr	1000 1100 01ss srrr div.d r s
+8csr	1000 1100 10ss srrr div r s
+8dsr	1000 1101 00ss srrr div.wr r s
+8dsr	1000 1101 01ss srrr div.dr r s
+8dsr	1000 1101 10ss srrr div.r r s
+8ccr	1000 1100 1100 1rrr div.wi r <literal>
+8cdr	1000 1100 1101 0rrr div.di r <literal>
+8cer	1000 1100 1110 0rrr div.i r <literal>
+8dcr	1000 1101 1100 1rrr div.wri r <address>
+8ddr	1000 1101 1101 0rrr div.dri r <address>
+8der	1000 1101 1110 0rrr div.ri r <address>
+8esr	1000 1110 00ss srrr cmp.w r s
+8esr	1000 1110 01ss srrr cmp.d r s
+8esr	1000 1110 10ss srrr cmp r s
+8fsr	1000 1111 00ss srrr cmp.wr r s
+8fsr	1000 1111 01ss srrr cmp.dr r s
+8fsr	1000 1111 10ss srrr cmp.r r s
+8ecr	1000 1110 1100 1rrr cmp.wi r <literal>
+8edr	1000 1110 1101 0rrr cmp.di r <literal>
+8eer	1000 1110 1110 0rrr cmp.i r <literal>
+8fcr	1000 1111 1100 1rrr cmp.wri r <address>
+8fdr	1000 1111 1101 0rrr cmp.dri r <address>
+8fer	1000 1111 1110 0rrr cmp.ri r <address>
 
-1001 0000 00ss srrr smod.w r s
-1001 0000 01ss srrr smod.d r s
-1001 0000 10ss srrr smod r s
-1001 0001 00ss srrr smod.wr r s
-1001 0001 01ss srrr smod.dr r s
-1001 0001 10ss srrr smod.r r s
-1001 0000 1100 1rrr smod.wi r <literal>
-1001 0000 1101 0rrr smod.di r <literal>
-1001 0000 1110 0rrr smod.i r <literal>
-1001 0001 1100 1rrr smod.wri r <address>
-1001 0001 1101 0rrr smod.dri r <address>
-1001 0001 1110 0rrr smod.ri r <address>
-1001 0010 00ss srrr sadd.w r s
-1001 0010 01ss srrr sadd.d r s
-1001 0010 10ss srrr sadd r s
-1001 0011 00ss srrr sadd.wr r s
-1001 0011 01ss srrr sadd.dr r s
-1001 0011 10ss srrr sadd.r r s
-1001 0010 1100 1rrr sadd.wi r <literal>
-1001 0010 1101 0rrr sadd.di r <literal>
-1001 0010 1110 0rrr sadd.i r <literal>
-1001 0011 1100 1rrr sadd.wri r <address>
-1001 0011 1101 0rrr sadd.dri r <address>
-1001 0011 1110 0rrr sadd.ri r <address>
-1001 0100 00ss srrr slsh.w r s
-1001 0100 01ss srrr slsh.d r s
-1001 0100 10ss srrr slsh r s
-1001 0101 00ss srrr slsh.wr r s
-1001 0101 01ss srrr slsh.dr r s
-1001 0101 10ss srrr slsh.r r s
-1001 0100 1100 1rrr slsh.wi r <literal>
-1001 0100 1101 0rrr slsh.di r <literal>
-1001 0100 1110 0rrr slsh.i r <literal>
-1001 0101 1100 1rrr slsh.wri r <address>
-1001 0101 1101 0rrr slsh.dri r <address>
-1001 0101 1110 0rrr slsh.ri r <address>
-1001 0110 00ss srrr ssub.w r s
-1001 0110 01ss srrr ssub.d r s
-1001 0110 10ss srrr ssub r s
-1001 0111 00ss srrr ssub.wr r s
-1001 0111 01ss srrr ssub.dr r s
-1001 0111 10ss srrr ssub.r r s
-1001 0110 1100 1rrr ssub.wi r <literal>
-1001 0110 1101 0rrr ssub.di r <literal>
-1001 0110 1110 0rrr ssub.i r <literal>
-1001 0111 1100 1rrr ssub.wri r <address>
-1001 0111 1101 0rrr ssub.dri r <address>
-1001 0111 1110 0rrr ssub.ri r <address>
-1001 1000 00ss srrr smul.w r s
-1001 1000 01ss srrr smul.d r s
-1001 1000 10ss srrr smul r s
-1001 1001 00ss srrr smul.wr r s
-1001 1001 01ss srrr smul.dr r s
-1001 1001 10ss srrr smul.r r s
-1001 1000 1100 1rrr smul.wi r <literal>
-1001 1000 1101 0rrr smul.di r <literal>
-1001 1000 1110 0rrr smul.i r <literal>
-1001 1001 1100 1rrr smul.wri r <address>
-1001 1001 1101 0rrr smul.dri r <address>
-1001 1001 1110 0rrr smul.ri r <address>
-1001 1010 00ss srrr srsh.w r s
-1001 1010 01ss srrr srsh.d r s
-1001 1010 10ss srrr srsh r s
-1001 1011 00ss srrr srsh.wr r s
-1001 1011 01ss srrr srsh.dr r s
-1001 1011 10ss srrr srsh.r r s
-1001 1010 1100 1rrr srsh.wi r <literal>
-1001 1010 1101 0rrr srsh.di r <literal>
-1001 1010 1110 0rrr srsh.i r <literal>
-1001 1011 1100 1rrr srsh.wri r <address>
-1001 1011 1101 0rrr srsh.dri r <address>
-1001 1011 1110 0rrr srsh.ri r <address>
-1001 1100 00ss srrr sdiv.w r s
-1001 1100 01ss srrr sdiv.d r s
-1001 1100 10ss srrr sdiv r s
-1001 1101 00ss srrr sdiv.wr r s
-1001 1101 01ss srrr sdiv.dr r s
-1001 1101 10ss srrr sdiv.r r s
-1001 1100 1100 1rrr sdiv.wi r <literal>
-1001 1100 1101 0rrr sdiv.di r <literal>
-1001 1100 1110 0rrr sdiv.i r <literal>
-1001 1101 1100 1rrr sdiv.wri r <address>
-1001 1101 1101 0rrr sdiv.dri r <address>
-1001 1101 1110 0rrr sdiv.ri r <address>
-1001 1110 00ss srrr scmp.w r s
-1001 1110 01ss srrr scmp.d r s
-1001 1110 10ss srrr scmp r s
-1001 1111 00ss srrr scmp.wr r s
-1001 1111 01ss srrr scmp.dr r s
-1001 1111 10ss srrr scmp.r r s
-1001 1110 1100 1rrr scmp.wi r <literal>
-1001 1110 1101 0rrr scmp.di r <literal>
-1001 1110 1110 0rrr scmp.i r <literal>
-1001 1111 1100 1rrr scmp.wri r <address>
-1001 1111 1101 0rrr scmp.dri r <address>
-1001 1111 1110 0rrr scmp.ri r <address>
+90sr	1001 0000 00ss srrr smod.w r s
+90sr	1001 0000 01ss srrr smod.d r s
+90sr	1001 0000 10ss srrr smod r s
+91sr	1001 0001 00ss srrr smod.wr r s
+91sr	1001 0001 01ss srrr smod.dr r s
+91sr	1001 0001 10ss srrr smod.r r s
+90cr	1001 0000 1100 1rrr smod.wi r <literal>
+90dr	1001 0000 1101 0rrr smod.di r <literal>
+90er	1001 0000 1110 0rrr smod.i r <literal>
+91cr	1001 0001 1100 1rrr smod.wri r <address>
+91dr	1001 0001 1101 0rrr smod.dri r <address>
+91er	1001 0001 1110 0rrr smod.ri r <address>
+92sr	1001 0010 00ss srrr sadd.w r s
+92sr	1001 0010 01ss srrr sadd.d r s
+92sr	1001 0010 10ss srrr sadd r s
+93sr	1001 0011 00ss srrr sadd.wr r s
+93sr	1001 0011 01ss srrr sadd.dr r s
+93sr	1001 0011 10ss srrr sadd.r r s
+92cr	1001 0010 1100 1rrr sadd.wi r <literal>
+92dr	1001 0010 1101 0rrr sadd.di r <literal>
+92er	1001 0010 1110 0rrr sadd.i r <literal>
+93cr	1001 0011 1100 1rrr sadd.wri r <address>
+93dr	1001 0011 1101 0rrr sadd.dri r <address>
+93er	1001 0011 1110 0rrr sadd.ri r <address>
+94sr	1001 0100 00ss srrr slsh.w r s
+94sr	1001 0100 01ss srrr slsh.d r s
+94sr	1001 0100 10ss srrr slsh r s
+95sr	1001 0101 00ss srrr slsh.wr r s
+95sr	1001 0101 01ss srrr slsh.dr r s
+95sr	1001 0101 10ss srrr slsh.r r s
+94cr	1001 0100 1100 1rrr slsh.wi r <literal>
+94dr	1001 0100 1101 0rrr slsh.di r <literal>
+94er	1001 0100 1110 0rrr slsh.i r <literal>
+95cr	1001 0101 1100 1rrr slsh.wri r <address>
+95dr	1001 0101 1101 0rrr slsh.dri r <address>
+95er	1001 0101 1110 0rrr slsh.ri r <address>
+96sr	1001 0110 00ss srrr ssub.w r s
+96sr	1001 0110 01ss srrr ssub.d r s
+96sr	1001 0110 10ss srrr ssub r s
+97sr	1001 0111 00ss srrr ssub.wr r s
+97sr	1001 0111 01ss srrr ssub.dr r s
+97sr	1001 0111 10ss srrr ssub.r r s
+96cr	1001 0110 1100 1rrr ssub.wi r <literal>
+96dr	1001 0110 1101 0rrr ssub.di r <literal>
+96er	1001 0110 1110 0rrr ssub.i r <literal>
+97cr	1001 0111 1100 1rrr ssub.wri r <address>
+97dr	1001 0111 1101 0rrr ssub.dri r <address>
+97er	1001 0111 1110 0rrr ssub.ri r <address>
+98sr	1001 1000 00ss srrr smul.w r s
+98sr	1001 1000 01ss srrr smul.d r s
+98sr	1001 1000 10ss srrr smul r s
+99sr	1001 1001 00ss srrr smul.wr r s
+99sr	1001 1001 01ss srrr smul.dr r s
+99sr	1001 1001 10ss srrr smul.r r s
+98cr	1001 1000 1100 1rrr smul.wi r <literal>
+98dr	1001 1000 1101 0rrr smul.di r <literal>
+98er	1001 1000 1110 0rrr smul.i r <literal>
+99cr	1001 1001 1100 1rrr smul.wri r <address>
+99dr	1001 1001 1101 0rrr smul.dri r <address>
+99er	1001 1001 1110 0rrr smul.ri r <address>
+9asr	1001 1010 00ss srrr srsh.w r s
+9asr	1001 1010 01ss srrr srsh.d r s
+9asr	1001 1010 10ss srrr srsh r s
+9bsr	1001 1011 00ss srrr srsh.wr r s
+9bsr	1001 1011 01ss srrr srsh.dr r s
+9bsr	1001 1011 10ss srrr srsh.r r s
+9acr	1001 1010 1100 1rrr srsh.wi r <literal>
+9adr	1001 1010 1101 0rrr srsh.di r <literal>
+9aer	1001 1010 1110 0rrr srsh.i r <literal>
+9bcr	1001 1011 1100 1rrr srsh.wri r <address>
+9bdr	1001 1011 1101 0rrr srsh.dri r <address>
+9ber	1001 1011 1110 0rrr srsh.ri r <address>
+9csr	1001 1100 00ss srrr sdiv.w r s
+9csr	1001 1100 01ss srrr sdiv.d r s
+9csr	1001 1100 10ss srrr sdiv r s
+9dsr	1001 1101 00ss srrr sdiv.wr r s
+9dsr	1001 1101 01ss srrr sdiv.dr r s
+9dsr	1001 1101 10ss srrr sdiv.r r s
+9ccr	1001 1100 1100 1rrr sdiv.wi r <literal>
+9cdr	1001 1100 1101 0rrr sdiv.di r <literal>
+9cer	1001 1100 1110 0rrr sdiv.i r <literal>
+9dcr	1001 1101 1100 1rrr sdiv.wri r <address>
+9ddr	1001 1101 1101 0rrr sdiv.dri r <address>
+9der	1001 1101 1110 0rrr sdiv.ri r <address>
+9esr	1001 1110 00ss srrr scmp.w r s
+9esr	1001 1110 01ss srrr scmp.d r s
+9esr	1001 1110 10ss srrr scmp r s
+9fsr	1001 1111 00ss srrr scmp.wr r s
+9fsr	1001 1111 01ss srrr scmp.dr r s
+9fsr	1001 1111 10ss srrr scmp.r r s
+9ecr	1001 1110 1100 1rrr scmp.wi r <literal>
+9edr	1001 1110 1101 0rrr scmp.di r <literal>
+9eer	1001 1110 1110 0rrr scmp.i r <literal>
+9fcr	1001 1111 1100 1rrr scmp.wri r <address>
+9fdr	1001 1111 1101 0rrr scmp.dri r <address>
+9fer	1001 1111 1110 0rrr scmp.ri r <address>
 
-1010 0000 00ss srrr bmod.w r s
-1010 0000 01ss srrr bmod.d r s
-1010 0000 10ss srrr bmod r s
-1010 0001 00ss srrr bmod.wr r s
-1010 0001 01ss srrr bmod.dr r s
-1010 0001 10ss srrr bmod.r r s
-1010 0000 1100 1rrr bmod.wi r <literal>
-1010 0000 1101 0rrr bmod.di r <literal>
-1010 0000 1110 0rrr bmod.i r <literal>
-1010 0001 1100 1rrr bmod.wri r <address>
-1010 0001 1101 0rrr bmod.dri r <address>
-1010 0001 1110 0rrr bmod.ri r <address>
-1010 0010 00ss srrr badd.w r s
-1010 0010 01ss srrr badd.d r s
-1010 0010 10ss srrr badd r s
-1010 0011 00ss srrr badd.wr r s
-1010 0011 01ss srrr badd.dr r s
-1010 0011 10ss srrr badd.r r s
-1010 0010 1100 1rrr badd.wi r <literal>
-1010 0010 1101 0rrr badd.di r <literal>
-1010 0010 1110 0rrr badd.i r <literal>
-1010 0011 1100 1rrr badd.wri r <address>
-1010 0011 1101 0rrr badd.dri r <address>
-1010 0011 1110 0rrr badd.ri r <address>
-1010 0110 00ss srrr bsub.w r s
-1010 0110 01ss srrr bsub.d r s
-1010 0110 10ss srrr bsub r s
-1010 0111 00ss srrr bsub.wr r s
-1010 0111 01ss srrr bsub.dr r s
-1010 0111 10ss srrr bsub.r r s
-1010 0110 1100 1rrr bsub.wi r <literal>
-1010 0110 1101 0rrr bsub.di r <literal>
-1010 0110 1110 0rrr bsub.i r <literal>
-1010 0111 1100 1rrr bsub.wri r <address>
-1010 0111 1101 0rrr bsub.dri r <address>
-1010 0111 1110 0rrr bsub.ri r <address>
-1010 1000 00ss srrr bmul.w r s
-1010 1000 01ss srrr bmul.d r s
-1010 1000 10ss srrr bmul r s
-1010 1001 00ss srrr bmul.wr r s
-1010 1001 01ss srrr bmul.dr r s
-1010 1001 10ss srrr bmul.r r s
-1010 1000 1100 1rrr bmul.wi r <literal>
-1010 1000 1101 0rrr bmul.di r <literal>
-1010 1000 1110 0rrr bmul.i r <literal>
-1010 1001 1100 1rrr bmul.wri r <address>
-1010 1001 1101 0rrr bmul.dri r <address>
-1010 1001 1110 0rrr bmul.ri r <address>
-1010 1100 00ss srrr bdiv.w r s
-1010 1100 01ss srrr bdiv.d r s
-1010 1100 10ss srrr bdiv r s
-1010 1101 00ss srrr bdiv.wr r s
-1010 1101 01ss srrr bdiv.dr r s
-1010 1101 10ss srrr bdiv.r r s
-1010 1100 1100 1rrr bdiv.wi r <literal>
-1010 1100 1101 0rrr bdiv.di r <literal>
-1010 1100 1110 0rrr bdiv.i r <literal>
-1010 1101 1100 1rrr bdiv.wri r <address>
-1010 1101 1101 0rrr bdiv.dri r <address>
-1010 1101 1110 0rrr bdiv.ri r <address>
+a0sr	1010 0000 00ss srrr bmod.w r s
+a0sr	1010 0000 01ss srrr bmod.d r s
+a0sr	1010 0000 10ss srrr bmod r s
+a1sr	1010 0001 00ss srrr bmod.wr r s
+a1sr	1010 0001 01ss srrr bmod.dr r s
+a1sr	1010 0001 10ss srrr bmod.r r s
+a0cr	1010 0000 1100 1rrr bmod.wi r <literal>
+a0dr	1010 0000 1101 0rrr bmod.di r <literal>
+a0er	1010 0000 1110 0rrr bmod.i r <literal>
+a1cr	1010 0001 1100 1rrr bmod.wri r <address>
+a1dr	1010 0001 1101 0rrr bmod.dri r <address>
+a1er	1010 0001 1110 0rrr bmod.ri r <address>
+a2sr	1010 0010 00ss srrr badd.w r s
+a2sr	1010 0010 01ss srrr badd.d r s
+a2sr	1010 0010 10ss srrr badd r s
+a3sr	1010 0011 00ss srrr badd.wr r s
+a3sr	1010 0011 01ss srrr badd.dr r s
+a3sr	1010 0011 10ss srrr badd.r r s
+a2cr	1010 0010 1100 1rrr badd.wi r <literal>
+a2dr	1010 0010 1101 0rrr badd.di r <literal>
+a2er	1010 0010 1110 0rrr badd.i r <literal>
+a3cr	1010 0011 1100 1rrr badd.wri r <address>
+a3dr	1010 0011 1101 0rrr badd.dri r <address>
+a3er	1010 0011 1110 0rrr badd.ri r <address>
+a6sr	1010 0110 00ss srrr bsub.w r s
+a6sr	1010 0110 01ss srrr bsub.d r s
+a6sr	1010 0110 10ss srrr bsub r s
+a7sr	1010 0111 00ss srrr bsub.wr r s
+a7sr	1010 0111 01ss srrr bsub.dr r s
+a7sr	1010 0111 10ss srrr bsub.r r s
+a6cr	1010 0110 1100 1rrr bsub.wi r <literal>
+a6dr	1010 0110 1101 0rrr bsub.di r <literal>
+a6er	1010 0110 1110 0rrr bsub.i r <literal>
+a7cr	1010 0111 1100 1rrr bsub.wri r <address>
+a7dr	1010 0111 1101 0rrr bsub.dri r <address>
+a7er	1010 0111 1110 0rrr bsub.ri r <address>
+a8sr	1010 1000 00ss srrr bmul.w r s
+a8sr	1010 1000 01ss srrr bmul.d r s
+a8sr	1010 1000 10ss srrr bmul r s
+a9sr	1010 1001 00ss srrr bmul.wr r s
+a9sr	1010 1001 01ss srrr bmul.dr r s
+a9sr	1010 1001 10ss srrr bmul.r r s
+a8cr	1010 1000 1100 1rrr bmul.wi r <literal>
+a8dr	1010 1000 1101 0rrr bmul.di r <literal>
+a8er	1010 1000 1110 0rrr bmul.i r <literal>
+a9cr	1010 1001 1100 1rrr bmul.wri r <address>
+a9dr	1010 1001 1101 0rrr bmul.dri r <address>
+a9er	1010 1001 1110 0rrr bmul.ri r <address>
+acsr	1010 1100 00ss srrr bdiv.w r s
+acsr	1010 1100 01ss srrr bdiv.d r s
+acsr	1010 1100 10ss srrr bdiv r s
+adsr	1010 1101 00ss srrr bdiv.wr r s
+adsr	1010 1101 01ss srrr bdiv.dr r s
+adsr	1010 1101 10ss srrr bdiv.r r s
+accr	1010 1100 1100 1rrr bdiv.wi r <literal>
+acdr	1010 1100 1101 0rrr bdiv.di r <literal>
+acer	1010 1100 1110 0rrr bdiv.i r <literal>
+adcr	1010 1101 1100 1rrr bdiv.wri r <address>
+addr	1010 1101 1101 0rrr bdiv.dri r <address>
+ader	1010 1101 1110 0rrr bdiv.ri r <address>
 
-1011 0010 00ss srrr fadd.w r s
-1011 0010 01ss srrr fadd.d r s
-1011 0010 10ss srrr fadd r s
-1011 0011 00ss srrr fadd.wr r s
-1011 0011 01ss srrr fadd.dr r s
-1011 0011 10ss srrr fadd.r r s
-1011 0010 1100 1rrr fadd.wi r <literal>
-1011 0010 1101 0rrr fadd.di r <literal>
-1011 0010 1110 0rrr fadd.i r <literal>
-1011 0011 1100 1rrr fadd.wri r <address>
-1011 0011 1101 0rrr fadd.dri r <address>
-1011 0011 1110 0rrr fadd.ri r <address>
-1011 0100 00ss srrr fpow.w r s
-1011 0100 01ss srrr fpow.d r s
-1011 0100 10ss srrr fpow r s
-1011 0101 00ss srrr fpow.wr r s
-1011 0101 01ss srrr fpow.dr r s
-1011 0101 10ss srrr fpow.r r s
-1011 0100 1100 1rrr fpow.wi r <literal>
-1011 0100 1101 0rrr fpow.di r <literal>
-1011 0100 1110 0rrr fpow.i r <literal>
-1011 0101 1100 1rrr fpow.wri r <address>
-1011 0101 1101 0rrr fpow.dri r <address>
-1011 0101 1110 0rrr fpow.ri r <address>
-1011 0110 00ss srrr fsub.w r s
-1011 0110 01ss srrr fsub.d r s
-1011 0110 10ss srrr fsub r s
-1011 0111 00ss srrr fsub.wr r s
-1011 0111 01ss srrr fsub.dr r s
-1011 0111 10ss srrr fsub.r r s
-1011 0110 1100 1rrr fsub.wi r <literal>
-1011 0110 1101 0rrr fsub.di r <literal>
-1011 0110 1110 0rrr fsub.i r <literal>
-1011 0111 1100 1rrr fsub.wri r <address>
-1011 0111 1101 0rrr fsub.dri r <address>
-1011 0111 1110 0rrr fsub.ri r <address>
-1011 1000 00ss srrr fmul.w r s
-1011 1000 01ss srrr fmul.d r s
-1011 1000 10ss srrr fmul r s
-1011 1001 00ss srrr fmul.wr r s
-1011 1001 01ss srrr fmul.dr r s
-1011 1001 10ss srrr fmul.r r s
-1011 1000 1100 1rrr fmul.wi r <literal>
-1011 1000 1101 0rrr fmul.di r <literal>
-1011 1000 1110 0rrr fmul.i r <literal>
-1011 1001 1100 1rrr fmul.wri r <address>
-1011 1001 1101 0rrr fmul.dri r <address>
-1011 1001 1110 0rrr fmul.ri r <address>
-1011 1010 00ss srrr flog.w r s
-1011 1010 01ss srrr flog.d r s
-1011 1010 10ss srrr flog r s
-1011 1011 00ss srrr flog.wr r s
-1011 1011 01ss srrr flog.dr r s
-1011 1011 10ss srrr flog.r r s
-1011 1010 1100 1rrr flog.wi r <literal>
-1011 1010 1101 0rrr flog.di r <literal>
-1011 1010 1110 0rrr flog.i r <literal>
-1011 1011 1100 1rrr flog.wri r <address>
-1011 1011 1101 0rrr flog.dri r <address>
-1011 1011 1110 0rrr flog.ri r <address>
-1011 1100 00ss srrr fdiv.w r s
-1011 1100 01ss srrr fdiv.d r s
-1011 1100 10ss srrr fdiv r s
-1011 1101 00ss srrr fdiv.wr r s
-1011 1101 01ss srrr fdiv.dr r s
-1011 1101 10ss srrr fdiv.r r s
-1011 1100 1100 1rrr fdiv.wi r <literal>
-1011 1100 1101 0rrr fdiv.di r <literal>
-1011 1100 1110 0rrr fdiv.i r <literal>
-1011 1101 1100 1rrr fdiv.wri r <address>
-1011 1101 1101 0rrr fdiv.dri r <address>
-1011 1101 1110 0rrr fdiv.ri r <address>
-1011 1110 00ss srrr fcmp.w r s
-1011 1110 01ss srrr fcmp.d r s
-1011 1110 10ss srrr fcmp r s
-1011 1111 00ss srrr fcmp.wr r s
-1011 1111 01ss srrr fcmp.dr r s
-1011 1111 10ss srrr fcmp.r r s
-1011 1110 1100 1rrr fcmp.wi r <literal>
-1011 1110 1101 0rrr fcmp.di r <literal>
-1011 1110 1110 0rrr fcmp.i r <literal>
-1011 1111 1100 1rrr fcmp.wri r <address>
-1011 1111 1101 0rrr fcmp.dri r <address>
-1011 1111 1110 0rrr fcmp.ri r <address>
+b2sr	1011 0010 00ss srrr fadd.w r s
+b2sr	1011 0010 01ss srrr fadd.d r s
+b2sr	1011 0010 10ss srrr fadd r s
+b3sr	1011 0011 00ss srrr fadd.wr r s
+b3sr	1011 0011 01ss srrr fadd.dr r s
+b3sr	1011 0011 10ss srrr fadd.r r s
+b2cr	1011 0010 1100 1rrr fadd.wi r <literal>
+b2dr	1011 0010 1101 0rrr fadd.di r <literal>
+b2er	1011 0010 1110 0rrr fadd.i r <literal>
+b3cr	1011 0011 1100 1rrr fadd.wri r <address>
+b3dr	1011 0011 1101 0rrr fadd.dri r <address>
+b3er	1011 0011 1110 0rrr fadd.ri r <address>
+b4sr	1011 0100 00ss srrr fpow.w r s
+b4sr	1011 0100 01ss srrr fpow.d r s
+b4sr	1011 0100 10ss srrr fpow r s
+b5sr	1011 0101 00ss srrr fpow.wr r s
+b5sr	1011 0101 01ss srrr fpow.dr r s
+b5sr	1011 0101 10ss srrr fpow.r r s
+b4cr	1011 0100 1100 1rrr fpow.wi r <literal>
+b4dr	1011 0100 1101 0rrr fpow.di r <literal>
+b4er	1011 0100 1110 0rrr fpow.i r <literal>
+b5cr	1011 0101 1100 1rrr fpow.wri r <address>
+b5dr	1011 0101 1101 0rrr fpow.dri r <address>
+b5er	1011 0101 1110 0rrr fpow.ri r <address>
+b6sr	1011 0110 00ss srrr fsub.w r s
+b6sr	1011 0110 01ss srrr fsub.d r s
+b6sr	1011 0110 10ss srrr fsub r s
+b7sr	1011 0111 00ss srrr fsub.wr r s
+b7sr	1011 0111 01ss srrr fsub.dr r s
+b7sr	1011 0111 10ss srrr fsub.r r s
+b6cr	1011 0110 1100 1rrr fsub.wi r <literal>
+b6dr	1011 0110 1101 0rrr fsub.di r <literal>
+b6er	1011 0110 1110 0rrr fsub.i r <literal>
+b7cr	1011 0111 1100 1rrr fsub.wri r <address>
+b7dr	1011 0111 1101 0rrr fsub.dri r <address>
+b7er	1011 0111 1110 0rrr fsub.ri r <address>
+b8sr	1011 1000 00ss srrr fmul.w r s
+b8sr	1011 1000 01ss srrr fmul.d r s
+b8sr	1011 1000 10ss srrr fmul r s
+b9sr	1011 1001 00ss srrr fmul.wr r s
+b9sr	1011 1001 01ss srrr fmul.dr r s
+b9sr	1011 1001 10ss srrr fmul.r r s
+b8cr	1011 1000 1100 1rrr fmul.wi r <literal>
+b8dr	1011 1000 1101 0rrr fmul.di r <literal>
+b8er	1011 1000 1110 0rrr fmul.i r <literal>
+b9cr	1011 1001 1100 1rrr fmul.wri r <address>
+b9dr	1011 1001 1101 0rrr fmul.dri r <address>
+b9er	1011 1001 1110 0rrr fmul.ri r <address>
+basr	1011 1010 00ss srrr flog.w r s
+basr	1011 1010 01ss srrr flog.d r s
+basr	1011 1010 10ss srrr flog r s
+bbsr	1011 1011 00ss srrr flog.wr r s
+bbsr	1011 1011 01ss srrr flog.dr r s
+bbsr	1011 1011 10ss srrr flog.r r s
+bacr	1011 1010 1100 1rrr flog.wi r <literal>
+badr	1011 1010 1101 0rrr flog.di r <literal>
+baer	1011 1010 1110 0rrr flog.i r <literal>
+bbcr	1011 1011 1100 1rrr flog.wri r <address>
+bbdr	1011 1011 1101 0rrr flog.dri r <address>
+bber	1011 1011 1110 0rrr flog.ri r <address>
+bcsr	1011 1100 00ss srrr fdiv.w r s
+bcsr	1011 1100 01ss srrr fdiv.d r s
+bcsr	1011 1100 10ss srrr fdiv r s
+bdsr	1011 1101 00ss srrr fdiv.wr r s
+bdsr	1011 1101 01ss srrr fdiv.dr r s
+bdsr	1011 1101 10ss srrr fdiv.r r s
+bccr	1011 1100 1100 1rrr fdiv.wi r <literal>
+bcdr	1011 1100 1101 0rrr fdiv.di r <literal>
+bcer	1011 1100 1110 0rrr fdiv.i r <literal>
+bdcr	1011 1101 1100 1rrr fdiv.wri r <address>
+bddr	1011 1101 1101 0rrr fdiv.dri r <address>
+bder	1011 1101 1110 0rrr fdiv.ri r <address>
+besr	1011 1110 00ss srrr fcmp.w r s
+besr	1011 1110 01ss srrr fcmp.d r s
+besr	1011 1110 10ss srrr fcmp r s
+bfsr	1011 1111 00ss srrr fcmp.wr r s
+bfsr	1011 1111 01ss srrr fcmp.dr r s
+bfsr	1011 1111 10ss srrr fcmp.r r s
+becr	1011 1110 1100 1rrr fcmp.wi r <literal>
+bedr	1011 1110 1101 0rrr fcmp.di r <literal>
+beer	1011 1110 1110 0rrr fcmp.i r <literal>
+bfcr	1011 1111 1100 1rrr fcmp.wri r <address>
+bfdr	1011 1111 1101 0rrr fcmp.dri r <address>
+bfer	1011 1111 1110 0rrr fcmp.ri r <address>
 
-1100 0000 00ss srrr not.w r s
-1100 0000 01ss srrr not.d r s
-1100 0000 10ss srrr not r s
-1100 0001 00ss srrr not.wr r s
-1100 0001 01ss srrr not.dr r s
-1100 0001 10ss srrr not.r r s
-1100 0000 1100 1rrr not.wi r <literal>
-1100 0000 1101 0rrr not.di r <literal>
-1100 0000 1110 0rrr not.i r <literal>
-1100 0001 1100 1rrr not.wri r <address>
-1100 0001 1101 0rrr not.dri r <address>
-1100 0001 1110 0rrr not.ri r <address>
-1100 0010 00ss srrr xor.w r s
-1100 0010 01ss srrr xor.d r s
-1100 0010 10ss srrr xor r s
-1100 0011 00ss srrr xor.wr r s
-1100 0011 01ss srrr xor.dr r s
-1100 0011 10ss srrr xor.r r s
-1100 0010 1100 1rrr xor.wi r <literal>
-1100 0010 1101 0rrr xor.di r <literal>
-1100 0010 1110 0rrr xor.i r <literal>
-1100 0011 1100 1rrr xor.wri r <address>
-1100 0011 1101 0rrr xor.dri r <address>
-1100 0011 1110 0rrr xor.ri r <address>
-1100 0110 00ss srrr ror.w r s
-1100 0110 01ss srrr ror.d r s
-1100 0110 10ss srrr ror r s
-1100 0111 00ss srrr ror.wr r s
-1100 0111 01ss srrr ror.dr r s
-1100 0111 10ss srrr ror.r r s
-1100 0110 1100 1rrr ror.wi r <literal>
-1100 0110 1101 0rrr ror.di r <literal>
-1100 0110 1110 0rrr ror.i r <literal>
-1100 0111 1100 1rrr ror.wri r <address>
-1100 0111 1101 0rrr ror.dri r <address>
-1100 0111 1110 0rrr ror.ri r <address>
-1100 1000 00ss srrr and.w r s
-1100 1000 01ss srrr and.d r s
-1100 1000 10ss srrr and r s
-1100 1001 00ss srrr and.wr r s
-1100 1001 01ss srrr and.dr r s
-1100 1001 10ss srrr and.r r s
-1100 1000 1100 1rrr and.wi r <literal>
-1100 1000 1101 0rrr and.di r <literal>
-1100 1000 1110 0rrr and.i r <literal>
-1100 1001 1100 1rrr and.wri r <address>
-1100 1001 1101 0rrr and.dri r <address>
-1100 1001 1110 0rrr and.ri r <address>
-1100 1010 00ss srrr or.w r s
-1100 1010 01ss srrr or.d r s
-1100 1010 10ss srrr or r s
-1100 1011 00ss srrr or.wr r s
-1100 1011 01ss srrr or.dr r s
-1100 1011 10ss srrr or.r r s
-1100 1010 1100 1rrr or.wi r <literal>
-1100 1010 1101 0rrr or.di r <literal>
-1100 1010 1110 0rrr or.i r <literal>
-1100 1011 1100 1rrr or.wri r <address>
-1100 1011 1101 0rrr or.dri r <address>
-1100 1011 1110 0rrr or.ri r <address>
-1100 1100 00ss srrr rol.w r s
-1100 1100 01ss srrr rol.d r s
-1100 1100 10ss srrr rol r s
-1100 1101 00ss srrr rol.wr r s
-1100 1101 01ss srrr rol.dr r s
-1100 1101 10ss srrr rol.r r s
-1100 1100 1100 1rrr rol.wi r <literal>
-1100 1100 1101 0rrr rol.di r <literal>
-1100 1100 1110 0rrr rol.i r <literal>
-1100 1101 1100 1rrr rol.wri r <address>
-1100 1101 1101 0rrr rol.dri r <address>
-1100 1101 1110 0rrr rol.ri r <address>
-1100 1110 00ss srrr popcount.w r s
-1100 1110 01ss srrr popcount.d r s
-1100 1110 10ss srrr popcount r s
-1100 1111 00ss srrr popcount.wr r s
-1100 1111 01ss srrr popcount.dr r s
-1100 1111 10ss srrr popcount.r r s
-1100 1110 1100 1rrr popcount.wi r <literal>
-1100 1110 1101 0rrr popcount.di r <literal>
-1100 1110 1110 0rrr popcount.i r <literal>
-1100 1111 1100 1rrr popcount.wri r <address>
-1100 1111 1101 0rrr popcount.dri r <address>
-1100 1111 1110 0rrr popcount.ri r <address>
+c0sr	1100 0000 00ss srrr not.w r s
+c0sr	1100 0000 01ss srrr not.d r s
+c0sr	1100 0000 10ss srrr not r s
+c1sr	1100 0001 00ss srrr not.wr r s
+c1sr	1100 0001 01ss srrr not.dr r s
+c1sr	1100 0001 10ss srrr not.r r s
+c0cr	1100 0000 1100 1rrr not.wi r <literal>
+c0dr	1100 0000 1101 0rrr not.di r <literal>
+c0er	1100 0000 1110 0rrr not.i r <literal>
+c1cr	1100 0001 1100 1rrr not.wri r <address>
+c1dr	1100 0001 1101 0rrr not.dri r <address>
+c1er	1100 0001 1110 0rrr not.ri r <address>
+c2sr	1100 0010 00ss srrr xor.w r s
+c2sr	1100 0010 01ss srrr xor.d r s
+c2sr	1100 0010 10ss srrr xor r s
+c3sr	1100 0011 00ss srrr xor.wr r s
+c3sr	1100 0011 01ss srrr xor.dr r s
+c3sr	1100 0011 10ss srrr xor.r r s
+c2cr	1100 0010 1100 1rrr xor.wi r <literal>
+c2dr	1100 0010 1101 0rrr xor.di r <literal>
+c2er	1100 0010 1110 0rrr xor.i r <literal>
+c3cr	1100 0011 1100 1rrr xor.wri r <address>
+c3dr	1100 0011 1101 0rrr xor.dri r <address>
+c3er	1100 0011 1110 0rrr xor.ri r <address>
+c6sr	1100 0110 00ss srrr ror.w r s
+c6sr	1100 0110 01ss srrr ror.d r s
+c6sr	1100 0110 10ss srrr ror r s
+c7sr	1100 0111 00ss srrr ror.wr r s
+c7sr	1100 0111 01ss srrr ror.dr r s
+c7sr	1100 0111 10ss srrr ror.r r s
+c6cr	1100 0110 1100 1rrr ror.wi r <literal>
+c6dr	1100 0110 1101 0rrr ror.di r <literal>
+c6er	1100 0110 1110 0rrr ror.i r <literal>
+c7cr	1100 0111 1100 1rrr ror.wri r <address>
+c7dr	1100 0111 1101 0rrr ror.dri r <address>
+c7er	1100 0111 1110 0rrr ror.ri r <address>
+c8sr	1100 1000 00ss srrr and.w r s
+c8sr	1100 1000 01ss srrr and.d r s
+c8sr	1100 1000 10ss srrr and r s
+c9sr	1100 1001 00ss srrr and.wr r s
+c9sr	1100 1001 01ss srrr and.dr r s
+c9sr	1100 1001 10ss srrr and.r r s
+c8cr	1100 1000 1100 1rrr and.wi r <literal>
+c8dr	1100 1000 1101 0rrr and.di r <literal>
+c8er	1100 1000 1110 0rrr and.i r <literal>
+c9cr	1100 1001 1100 1rrr and.wri r <address>
+c9dr	1100 1001 1101 0rrr and.dri r <address>
+c9er	1100 1001 1110 0rrr and.ri r <address>
+casr	1100 1010 00ss srrr or.w r s
+casr	1100 1010 01ss srrr or.d r s
+casr	1100 1010 10ss srrr or r s
+cbsr	1100 1011 00ss srrr or.wr r s
+cbsr	1100 1011 01ss srrr or.dr r s
+cbsr	1100 1011 10ss srrr or.r r s
+cacr	1100 1010 1100 1rrr or.wi r <literal>
+cadr	1100 1010 1101 0rrr or.di r <literal>
+caer	1100 1010 1110 0rrr or.i r <literal>
+cbcr	1100 1011 1100 1rrr or.wri r <address>
+cbdr	1100 1011 1101 0rrr or.dri r <address>
+cber	1100 1011 1110 0rrr or.ri r <address>
+ccsr	1100 1100 00ss srrr rol.w r s
+ccsr	1100 1100 01ss srrr rol.d r s
+ccsr	1100 1100 10ss srrr rol r s
+cdsr	1100 1101 00ss srrr rol.wr r s
+cdsr	1100 1101 01ss srrr rol.dr r s
+cdsr	1100 1101 10ss srrr rol.r r s
+cccr	1100 1100 1100 1rrr rol.wi r <literal>
+ccdr	1100 1100 1101 0rrr rol.di r <literal>
+ccer	1100 1100 1110 0rrr rol.i r <literal>
+cdcr	1100 1101 1100 1rrr rol.wri r <address>
+cddr	1100 1101 1101 0rrr rol.dri r <address>
+cder	1100 1101 1110 0rrr rol.ri r <address>
+cesr	1100 1110 00ss srrr popcount.w r s
+cesr	1100 1110 01ss srrr popcount.d r s
+cesr	1100 1110 10ss srrr popcount r s
+cfsr	1100 1111 00ss srrr popcount.wr r s
+cfsr	1100 1111 01ss srrr popcount.dr r s
+cfsr	1100 1111 10ss srrr popcount.r r s
+cecr	1100 1110 1100 1rrr popcount.wi r <literal>
+cedr	1100 1110 1101 0rrr popcount.di r <literal>
+ceer	1100 1110 1110 0rrr popcount.i r <literal>
+cfcr	1100 1111 1100 1rrr popcount.wri r <address>
+cfdr	1100 1111 1101 0rrr popcount.dri r <address>
+cfer	1100 1111 1110 0rrr popcount.ri r <address>
 
-1101 0010 00ss srrr cadd.w r s
-1101 0010 01ss srrr cadd.d r s
-1101 0010 10ss srrr cadd r s
-1101 0011 00ss srrr cadd.wr r s
-1101 0011 01ss srrr cadd.dr r s
-1101 0011 10ss srrr cadd.r r s
-1101 0010 1100 1rrr cadd.wi r <literal>
-1101 0010 1101 0rrr cadd.di r <literal>
-1101 0010 1110 0rrr cadd.i r <literal>
-1101 0011 1100 1rrr cadd.wri r <address>
-1101 0011 1101 0rrr cadd.dri r <address>
-1101 0011 1110 0rrr cadd.ri r <address>
-1101 0100 00ss srrr clsh.w r s
-1101 0100 01ss srrr clsh.d r s
-1101 0100 10ss srrr clsh r s
-1101 0101 00ss srrr clsh.wr r s
-1101 0101 01ss srrr clsh.dr r s
-1101 0101 10ss srrr clsh.r r s
-1101 0100 1100 1rrr clsh.wi r <literal>
-1101 0100 1101 0rrr clsh.di r <literal>
-1101 0100 1110 0rrr clsh.i r <literal>
-1101 0101 1100 1rrr clsh.wri r <address>
-1101 0101 1101 0rrr clsh.dri r <address>
-1101 0101 1110 0rrr clsh.ri r <address>
-1101 0110 00ss srrr csub.w r s
-1101 0110 01ss srrr csub.d r s
-1101 0110 10ss srrr csub r s
-1101 0111 00ss srrr csub.wr r s
-1101 0111 01ss srrr csub.dr r s
-1101 0111 10ss srrr csub.r r s
-1101 0110 1100 1rrr csub.wi r <literal>
-1101 0110 1101 0rrr csub.di r <literal>
-1101 0110 1110 0rrr csub.i r <literal>
-1101 0111 1100 1rrr csub.wri r <address>
-1101 0111 1101 0rrr csub.dri r <address>
-1101 0111 1110 0rrr csub.ri r <address>
-1101 1000 00ss srrr cmul.w r s
-1101 1000 01ss srrr cmul.d r s
-1101 1000 10ss srrr cmul r s
-1101 1001 00ss srrr cmul.wr r s
-1101 1001 01ss srrr cmul.dr r s
-1101 1001 10ss srrr cmul.r r s
-1101 1000 1100 1rrr cmul.wi r <literal>
-1101 1000 1101 0rrr cmul.di r <literal>
-1101 1000 1110 0rrr cmul.i r <literal>
-1101 1001 1100 1rrr cmul.wri r <address>
-1101 1001 1101 0rrr cmul.dri r <address>
-1101 1001 1110 0rrr cmul.ri r <address>
-1101 1010 00ss srrr crsh.w r s
-1101 1010 01ss srrr crsh.d r s
-1101 1010 10ss srrr crsh r s
-1101 1011 00ss srrr crsh.wr r s
-1101 1011 01ss srrr crsh.dr r s
-1101 1011 10ss srrr crsh.r r s
-1101 1010 1100 1rrr crsh.wi r <literal>
-1101 1010 1101 0rrr crsh.di r <literal>
-1101 1010 1110 0rrr crsh.i r <literal>
-1101 1011 1100 1rrr crsh.wri r <address>
-1101 1011 1101 0rrr crsh.dri r <address>
-1101 1011 1110 0rrr crsh.ri r <address>
-1101 1100 00ss srrr cdiv.w r s
-1101 1100 01ss srrr cdiv.d r s
-1101 1100 10ss srrr cdiv r s
-1101 1101 00ss srrr cdiv.wr r s
-1101 1101 01ss srrr cdiv.dr r s
-1101 1101 10ss srrr cdiv.r r s
-1101 1100 1100 1rrr cdiv.wi r <literal>
-1101 1100 1101 0rrr cdiv.di r <literal>
-1101 1100 1110 0rrr cdiv.i r <literal>
-1101 1101 1100 1rrr cdiv.wri r <address>
-1101 1101 1101 0rrr cdiv.dri r <address>
-1101 1101 1110 0rrr cdiv.ri r <address>
-1101 1110 00ss srrr ccmp.w r s
-1101 1110 01ss srrr ccmp.d r s
-1101 1110 10ss srrr ccmp r s
-1101 1111 00ss srrr ccmp.wr r s
-1101 1111 01ss srrr ccmp.dr r s
-1101 1111 10ss srrr ccmp.r r s
-1101 1110 1100 1rrr ccmp.wi r <literal>
-1101 1110 1101 0rrr ccmp.di r <literal>
-1101 1110 1110 0rrr ccmp.i r <literal>
-1101 1111 1100 1rrr ccmp.wri r <address>
-1101 1111 1101 0rrr ccmp.dri r <address>
-1101 1111 1110 0rrr ccmp.ri r <address>
-1101 0000 00ss srrr ccmp.we r s
-1101 0000 01ss srrr ccmp.de r s
-1101 0000 10ss srrr ccmp.e r s
+d2sr	1101 0010 00ss srrr cadd.w r s
+d2sr	1101 0010 01ss srrr cadd.d r s
+d2sr	1101 0010 10ss srrr cadd r s
+d3sr	1101 0011 00ss srrr cadd.wr r s
+d3sr	1101 0011 01ss srrr cadd.dr r s
+d3sr	1101 0011 10ss srrr cadd.r r s
+d2cr	1101 0010 1100 1rrr cadd.wi r <literal>
+d2dr	1101 0010 1101 0rrr cadd.di r <literal>
+d2er	1101 0010 1110 0rrr cadd.i r <literal>
+d3cr	1101 0011 1100 1rrr cadd.wri r <address>
+d3dr	1101 0011 1101 0rrr cadd.dri r <address>
+d3er	1101 0011 1110 0rrr cadd.ri r <address>
+d4sr	1101 0100 00ss srrr clsh.w r s
+d4sr	1101 0100 01ss srrr clsh.d r s
+d4sr	1101 0100 10ss srrr clsh r s
+d5sr	1101 0101 00ss srrr clsh.wr r s
+d5sr	1101 0101 01ss srrr clsh.dr r s
+d5sr	1101 0101 10ss srrr clsh.r r s
+d4cr	1101 0100 1100 1rrr clsh.wi r <literal>
+d4dr	1101 0100 1101 0rrr clsh.di r <literal>
+d4er	1101 0100 1110 0rrr clsh.i r <literal>
+d5cr	1101 0101 1100 1rrr clsh.wri r <address>
+d5dr	1101 0101 1101 0rrr clsh.dri r <address>
+d5er	1101 0101 1110 0rrr clsh.ri r <address>
+d6sr	1101 0110 00ss srrr csub.w r s
+d6sr	1101 0110 01ss srrr csub.d r s
+d6sr	1101 0110 10ss srrr csub r s
+d7sr	1101 0111 00ss srrr csub.wr r s
+d7sr	1101 0111 01ss srrr csub.dr r s
+d7sr	1101 0111 10ss srrr csub.r r s
+d6cr	1101 0110 1100 1rrr csub.wi r <literal>
+d6dr	1101 0110 1101 0rrr csub.di r <literal>
+d6er	1101 0110 1110 0rrr csub.i r <literal>
+d7cr	1101 0111 1100 1rrr csub.wri r <address>
+d7dr	1101 0111 1101 0rrr csub.dri r <address>
+d7er	1101 0111 1110 0rrr csub.ri r <address>
+d8sr	1101 1000 00ss srrr cmul.w r s
+d8sr	1101 1000 01ss srrr cmul.d r s
+d8sr	1101 1000 10ss srrr cmul r s
+d9sr	1101 1001 00ss srrr cmul.wr r s
+d9sr	1101 1001 01ss srrr cmul.dr r s
+d9sr	1101 1001 10ss srrr cmul.r r s
+d8cr	1101 1000 1100 1rrr cmul.wi r <literal>
+d8dr	1101 1000 1101 0rrr cmul.di r <literal>
+d8er	1101 1000 1110 0rrr cmul.i r <literal>
+d9cr	1101 1001 1100 1rrr cmul.wri r <address>
+d9dr	1101 1001 1101 0rrr cmul.dri r <address>
+d9er	1101 1001 1110 0rrr cmul.ri r <address>
+dasr	1101 1010 00ss srrr crsh.w r s
+dasr	1101 1010 01ss srrr crsh.d r s
+dasr	1101 1010 10ss srrr crsh r s
+dbsr	1101 1011 00ss srrr crsh.wr r s
+dbsr	1101 1011 01ss srrr crsh.dr r s
+dbsr	1101 1011 10ss srrr crsh.r r s
+dacr	1101 1010 1100 1rrr crsh.wi r <literal>
+dadr	1101 1010 1101 0rrr crsh.di r <literal>
+daer	1101 1010 1110 0rrr crsh.i r <literal>
+dbcr	1101 1011 1100 1rrr crsh.wri r <address>
+dbdr	1101 1011 1101 0rrr crsh.dri r <address>
+dber	1101 1011 1110 0rrr crsh.ri r <address>
+dcsr	1101 1100 00ss srrr cdiv.w r s
+dcsr	1101 1100 01ss srrr cdiv.d r s
+dcsr	1101 1100 10ss srrr cdiv r s
+ddsr	1101 1101 00ss srrr cdiv.wr r s
+ddsr	1101 1101 01ss srrr cdiv.dr r s
+ddsr	1101 1101 10ss srrr cdiv.r r s
+dccr	1101 1100 1100 1rrr cdiv.wi r <literal>
+dcdr	1101 1100 1101 0rrr cdiv.di r <literal>
+dcer	1101 1100 1110 0rrr cdiv.i r <literal>
+ddcr	1101 1101 1100 1rrr cdiv.wri r <address>
+dddr	1101 1101 1101 0rrr cdiv.dri r <address>
+dder	1101 1101 1110 0rrr cdiv.ri r <address>
+desr	1101 1110 00ss srrr ccmp.w r s
+desr	1101 1110 01ss srrr ccmp.d r s
+desr	1101 1110 10ss srrr ccmp r s
+dfsr	1101 1111 00ss srrr ccmp.wr r s
+dfsr	1101 1111 01ss srrr ccmp.dr r s
+dfsr	1101 1111 10ss srrr ccmp.r r s
+decr	1101 1110 1100 1rrr ccmp.wi r <literal>
+dedr	1101 1110 1101 0rrr ccmp.di r <literal>
+deer	1101 1110 1110 0rrr ccmp.i r <literal>
+dfcr	1101 1111 1100 1rrr ccmp.wri r <address>
+dfdr	1101 1111 1101 0rrr ccmp.dri r <address>
+dfer	1101 1111 1110 0rrr ccmp.ri r <address>
+d0sr	1101 0000 00ss srrr ccmp.we r s
+d0sr	1101 0000 01ss srrr ccmp.de r s
+d0sr	1101 0000 10ss srrr ccmp.e r s
 
-1110 0000 00ss srrr	strcpy r s
-1110 0000 01ss srrr	load.bl r s
-1110 0000 10ss srrr	load.bh r s
-1110 0000 11ss srrr	strsize r s
-1110 0001 00ss srrr	strrev r s
-1110 0001 01ss srrr	store.bl r s
-1110 0001 10ss srrr	store.bh r s
-1110 0001 11** ****	(unused)
-1110 001t ttss srrr	strcat r s t
-1110 010t ttss srrr	strpos r s t
-1110 011t ttss srrr	getbyte r s t
-1110 100t ttss srrr	setbyte r s t
-1110 101t ttss srrr	behead r s t
-1110 1101 1100 0rrr	put.bli r w
-1110 1101 1111 1rrr	put.bhi r w
-1110 1110 00ss srrr	strcmp r s
+e0sr	1110 0000 00ss srrr	strcpy r s
+e0sr	1110 0000 01ss srrr	load.bl r s
+e0sr	1110 0000 10ss srrr	load.bh r s
+e0sr	1110 0000 11ss srrr	strsize r s
+e1sr	1110 0001 00ss srrr	strrev r s
+e1sr	1110 0001 01ss srrr	store.bl r s
+e1sr	1110 0001 10ss srrr	store.bh r s
+e1c*	1110 0001 11** ****	(unused)
+etsr	1110 001t ttss srrr	strcat r s t
+etsr	1110 010t ttss srrr	strpos r s t
+etsr	1110 011t ttss srrr	getbyte r s t
+etsr	1110 100t ttss srrr	setbyte r s t
+etsr	1110 101t ttss srrr	behead r s t
+edcr	1110 1101 1100 0rrr	put.bli r w
+edfr	1110 1101 1111 1rrr	put.bhi r w
+eesr	1110 1110 00ss srrr	strcmp r s
 
 
 3.2. Jump Instructions
 ----------------------
 
-01?0........RRRR
+01Y0 .... .... RRRR
 					run AND against bottom 8 bits of status register, and jump to 64-bit address. If R is 1111, read address as subsequent q, otherwise read address from register R
-					? = 0: jump only if at least one bit is turned on
-					? = 1: jump only if all bits are turned off
+					Y = 0: jump only if at least one bit is turned on
+					Y = 1: jump only if all bits are turned off
 					
-					........ = bitmask to use against bottom 8 bits of status register
+					.... .... = bitmask to use against bottom 8 bits of status register
 
-0110 0000 0000 RRRR	jmp	q/R				jump to address in register r (unconditional jump)
-0100 0000 0000 RRRR	jmp	q/R				do nothing
+600R	0110 0000 0000 RRRR	jmp	q/R				jump to address in register r (unconditional jump)
+400R	0100 0000 0000 RRRR	jmp	q/R				do nothing
 
-0110 0000 0100 RRRR	jne	q/R				jmp if E flag not set
-0100 0000 0001 RRRR	jc q/R				jmp if C flag set
-0110 0000 0001 RRRR	jnc q/R				jmp if C flag not set
-0100 0000 1100 RRRR	jge q/R				jmp if G or E flag set
-0100 0000 0100 RRRR	je q/R				jmp if E flag set
-0100 0000 0110 RRRR	jle q/R				jmp if L or E flag set
-0100 0000 1000 RRRR	jg q/R				jmp if G flag set
-0100 0000 0010 RRRR	jl q/R				jmp if L flag set
-0100 0001 0000 RRRR	jz q/R				jmp	if Z flag set
-0110 0001 0000 RRRR	jnz q/R				jmp	if Z flag not set
-0100 0010 0000 RRRR	js q/R				jmp if S flag set
-0110 0010 0000 RRRR	jns q/R				jmp if S flag not set
+604R	0110 0000 0100 RRRR	jne	q/R				jmp if E flag not set
+401R	0100 0000 0001 RRRR	jc q/R				jmp if C flag set
+601R	0110 0000 0001 RRRR	jnc q/R				jmp if C flag not set
+40cR	0100 0000 1100 RRRR	jge q/R				jmp if G or E flag set
+404R	0100 0000 0100 RRRR	je q/R				jmp if E flag set
+406R	0100 0000 0110 RRRR	jle q/R				jmp if L or E flag set
+408R	0100 0000 1000 RRRR	jg q/R				jmp if G flag set
+402R	0100 0000 0010 RRRR	jl q/R				jmp if L flag set
+410R	0100 0001 0000 RRRR	jz q/R				jmp	if Z flag set
+610R	0110 0001 0000 RRRR	jnz q/R				jmp	if Z flag not set
+420R	0100 0010 0000 RRRR	js q/R				jmp if S flag set
+620R	0110 0010 0000 RRRR	jns q/R				jmp if S flag not set
 
 Other values for ........ are possible but have no defined mnemonics.
 
@@ -1151,52 +1152,48 @@ Other values for ........ are possible but have no defined mnemonics.
 
 The repeat family instructions cause the last instruction to be executed multiple times. The CPU uses hardware to perform these loops; they are not assembler directives. Literal values cannot be incremented; they must be in registers.
 
-0001 1000 0000 RRRR	rep.n R				repeat previous instruction R times
-0001 1000 0001 RRRR	rep.wr R			repeat R times, incrementing contents of 'r' register by 1
-0001 1000 0010 RRRR	rep.ws R			repeat R times, incrementing contents of 's' register by 1
-0001 1000 0011 RRRR	rep.wrs R			repeat R times, incrementing contents of 'r' and 's' registers by 1
-0001 1000 0101 RRRR	rep.dr R			repeat R times, incrementing contents of 'r' register by 2
-0001 1000 0110 RRRR	rep.ds R			repeat R times, incrementing contents of 's' register by 2
-0001 1000 0111 RRRR	rep.drs R			repeat R times, incrementing contents of 'r' and 's' registers by 2
-0001 1000 1001 RRRR	rep.qr R			repeat R times, incrementing contents of 'r' register by 4
-0001 1000 1010 RRRR	rep.qs R			repeat R times, incrementing contents of 's' register by 4
-0001 1000 1011 RRRR	rep.qrs R			repeat R times, incrementing contents of 'r' and 's' registers by 4
+180R	0001 1000 0000 RRRR	rep.n R				repeat previous instruction R times
+181R	0001 1000 0001 RRRR	rep.wr R			repeat R times, incrementing contents of 'r' register by 1
+182R	0001 1000 0010 RRRR	rep.ws R			repeat R times, incrementing contents of 's' register by 1
+183R	0001 1000 0011 RRRR	rep.wrs R			repeat R times, incrementing contents of 'r' and 's' registers by 1
+185R	0001 1000 0101 RRRR	rep.dr R			repeat R times, incrementing contents of 'r' register by 2
+186R	0001 1000 0110 RRRR	rep.ds R			repeat R times, incrementing contents of 's' register by 2
+187R	0001 1000 0111 RRRR	rep.drs R			repeat R times, incrementing contents of 'r' and 's' registers by 2
+189R	0001 1000 1001 RRRR	rep.qr R			repeat R times, incrementing contents of 'r' register by 4
+18aR	0001 1000 1010 RRRR	rep.qs R			repeat R times, incrementing contents of 's' register by 4
+18bR	0001 1000 1011 RRRR	rep.qrs R			repeat R times, incrementing contents of 'r' and 's' registers by 4
 
 
 3.4. Special Flow Control Operations
 ------------------------------------
 
-1111 0000 bbbb bbbb	int b				call interrupt x (see 5.)
-										if b is 0, halt entire system (all CPUs)
-										if b is 255, call any pending interrupts 
-1111 0100 0000 0001	iret				return from interrupt
-										restore M flag (according to IAT entry for CI, see 5.) and jump to ra
+f0vv	1111 0000 bbbb bbbb	int b				call interrupt x (see 5.)
+												if b is 0, halt entire system (all CPUs)
+												if b is 255, call any pending interrupts 
+f401	1111 0100 0000 0001	iret				return from interrupt
+												restore M flag (according to IAT entry for CI, see 5.) and jump to ra
 
-1111 0100 0001 RRRR lmmt R				load MMR from register R or trailer address (see 6.)
-										MMT is not active until the M flag is set
-										if the loaded address is 0 (null), the M flag is automatically disabled
+f41R	1111 0100 0001 RRRR lmmt R				load MMR from register R or trailer address (see 6.)
+												MMT is not active until the M flag is set
+												if the loaded address is 0 (null), the M flag is automatically disabled
 
-1111 0100 0000 0000	ret					pop pc, sb, sp
-1111 1000 0000 RRRR	call R				push sp, sb, pc, set sb to sp, and jump to address in register R
-1111 1000 0000 1111	call q				push sp, sb, pc, set sb to sp, and jump to address literal q
-qqqq qqqq qqqq qqqq
-qqqq qqqq qqqq qqqq
-qqqq qqqq qqqq qqqq
-qqqq qqqq qqqq qqqq
+f400	1111 0100 0000 0000	ret					pop pc, sb, sp (jump back to old pc)
+f80R	1111 1000 0000 RRRR	call R				push sp, sb, pc, set sb to sp, and jump to address in register R
+f80f	1111 1000 0000 1111	call q				push sp, sb, pc, set sb to sp, and jump to address literal q
 
-1111 0001 **** ****						unused
-1111 0010 **** ****						unused
-1111 0011 **** ****						unused
-1111 0101 **** ****						unused
-1111 0110 **** ****						unused
-1111 0111 **** ****						unused
-1111 1001 **** ****						unused
-1111 1010 **** ****						unused
-1111 1011 **** ****						unused
-1111 1100 **** ****						unused
-1111 1101 **** ****						unused
-1111 1110 **** ****						unused
-1111 1111 **** ****						unused
+f1**	1111 0001 **** ****						unused
+f2**	1111 0010 **** ****						unused
+f3**	1111 0011 **** ****						unused
+f5**	1111 0101 **** ****						unused
+f6**	1111 0110 **** ****						unused
+f7**	1111 0111 **** ****						unused
+f9**	1111 1001 **** ****						unused
+fa**	1111 1010 **** ****						unused
+fb**	1111 1011 **** ****						unused
+fc**	1111 1100 **** ****						unused
+fd**	1111 1101 **** ****						unused
+fe**	1111 1110 **** ****						unused
+ff**	1111 1111 **** ****						unused
 
 
 3.5. Debug Instructions
@@ -1204,13 +1201,13 @@ qqqq qqqq qqqq qqqq
 
 Debug instructions start with the bits 00101.
 
-0010 1000 bbbb bbbb cout b				Print b to debug terminal
-0010 1001 0000 rrrr creg r				Print register r to debug terminal (decimal) #NEW#
-0010 1001 0001 rrrr cregx r				Print register r to debug terminal (hexadecimal) #NEW#
-0010 1001 0010 rrrr crega r				Print register r to debug terminal (single ASCII character) #NEW#
-0010 1001 1000 rrrr cin r				Pause CPU until a decimal number is entered; put in register r #NEW#
-0010 1001 1001 rrrr cinx r				Pause CPU until a hexadecimal number is entered; put in register r #NEW#
-0010 1001 1010 rrrr cina r				Pause CPU until an ASCII character is entered; put in register r #NEW#
+28vv	0010 1000 bbbb bbbb cout b				Print b to debug terminal
+290r	0010 1001 0000 rrrr creg r				Print register r to debug terminal (decimal)
+291r	0010 1001 0001 rrrr cregx r				Print register r to debug terminal (hexadecimal)
+292r	0010 1001 0010 rrrr crega r				Print register r to debug terminal (single ASCII character)
+298r	0010 1001 1000 rrrr cin r				Pause CPU until a decimal number is entered; put in register r
+299r	0010 1001 1001 rrrr cinx r				Pause CPU until a hexadecimal number is entered; put in register r
+29ar	0010 1001 1010 rrrr cina r				Pause CPU until an ASCII character is entered; put in register r
 
 
 3.6. CHAS Directives
