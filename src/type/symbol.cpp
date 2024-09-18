@@ -62,7 +62,7 @@ int apply_patches() {
             p->child->instruction->output[7] = (address >> 16) & 0xff;
             p->child->instruction->output[8] = (address >>  8) & 0xff;
             p->child->instruction->output[9] = (address >>  0) & 0xff;
-            printf(" -- patched address on line %u\n", p->child->instruction->line);
+            printf(" -- patched address to '%s' (0x%llx) on line %u\n", p->child->label->text, p->child->label->address, p->child->instruction->line);
         }
         p = p->next;
     }
@@ -913,7 +913,7 @@ int symbolize(link<token>* t) {
 
                 if(t->child->type == TK_LIT_STRING) {
                     t->child->address = address;
-                    address += strlen(t->child->output) >> 1;
+                    address += (t->child->output_size) / 2;
                     
                     printf("%4x\tSTR\t%04x bytes / original text \"%s\"\n", ln, t->child->output_size, t->child->text);
 
