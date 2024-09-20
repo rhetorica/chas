@@ -53,6 +53,10 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "pop.h",   0x021F, O_ZERO);
     last_opcode = add_opcode(last_opcode, n++, "load.a",  0x0430, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "load.h",  0x0410, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
+    last_opcode = add_opcode(last_opcode, n++, "real",    0x0500, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "real.i",  0x05f0, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
+    last_opcode = add_opcode(last_opcode, n++, "unreal",    0x0600, O_MONO | O_DUO);
+    last_opcode = add_opcode(last_opcode, n++, "unreal.i",  0x06f0, O_MONO | O_LIT_64 | O_LIT_REF | O_MONO_AND_LIT);
     last_opcode = add_opcode(last_opcode, n++, "store.a", 0x0830, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "store.h", 0x0810, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "cdr",     0x0B00, O_MONO | O_DUO | O_STATUS_FORBIDDEN);
@@ -144,6 +148,7 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "creg",    0x2900, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "cregx",   0x2910, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "crega",   0x2920, O_MONO);
+    last_opcode = add_opcode(last_opcode, n++, "cregf",   0x2920, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "cin",     0x2980, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "cinx",    0x2990, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "cina",    0x29A0, O_MONO);

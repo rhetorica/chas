@@ -54,19 +54,28 @@ CONTENTS
 5. INTERRUPT ADDRESS TABLE
   5.1. List of Interrupts
   5.2. System Interrupts
+    5.2.1. Interrupt 0: System Halt
+	5.2.2. Interrupt 1: DMT Update
+	5.2.3. Interrupt 2: Page Fault
+	5.2.4. Interrupt 3: Push Fault
+	5.2.5. Interrupt 4: Invalid Table
+	5.2.6. Interrupt 5: Cache Miss
+	5.2.7. Interrupt 6: Timer
+	5.2.8. Interrupt 7: Set Timer
   5.3. OS Interrupts
   5.4. Device Interrupts
-  5.5. IRET Types
+  5.5. Interrupt Types
     5.5.1. Type A: Mapless
 	5.5.2. Type B: Interrupt Adds Mapping
 	5.5.3. Type C: Map-Escape Interrupt
 	5.5.4. Type D: Alternate-Map Interrupt
 	5.5.5. Type E: Same-Map Interrupt 
+	5.5.6. Type F: Device Control Interrupt
 6. MEMORY MAP TABLE
   6.1. Leaving mapped mode
 7. PROCESSES & RINGS
 8. DEVICE MANAGEMENT TABLE
-9. HAIDEIA FIRMWARE ROM
+9. RADIX FIRMWARE ROM
   9.1. Configuration UI
   9.2. Firmware Interrupts
   9.3. Recovery Environment (*)
@@ -320,7 +329,6 @@ A bit index is a number from 0 to 63 encoded using 6 bits to represent the ordin
 The Drakira vector processor allows setting arbitrary data unit lengths for working with signed and unsigned integers, as well as balanced ternary, 32-bit floats, 64-bit complex numbers, and certain compound types. See 10.6.2. Drakira Data Formats for more information.
 
 
-
 ===============
 3. INSTRUCTIONS
 ===============
@@ -357,8 +365,10 @@ Word	Bitmask				CHAS Mnemonic		Description
 03**	0000 0011 **** **** 					unused
 043R	0000 0100 **11 RRRR	load.a R			load all registers from (void*)r (or from literal address if R is 1111)
 041R	0000 0100 **01 RRRR	load.h R			load all data registers (a-h) from (void*)r (or from literal address if R is 1111)
-05**	0000 0101 **** **** 					unused
-06**	0000 0110 **** ****						unused
+05**	0000 0101 SSSS rrrr real r S			populate r with real (flat) memory address from virtual address in register S, or -1 if unmapped
+05f*	0000 0101 1111 rrrr real.i r <address>	as `real`, but with literal address
+06**	0000 0110 SSSS rrrr unreal r S			UNIMPLEMENTED - populate r with virtually mapped memory address corresponding to real (flat) location S
+06f*	0000 0110 1111 rrrr	unreal.i r <address>	UNIMPLEMENTED - as `unreal`, but with literal address
 07**	0000 0111 **** ****						unused
 083R	0000 1000 **11 RRRR	store.a R			store all registers at (void*)r (or at literal address if R is 1111)
 081R	0000 1000 **01 RRRR	store.h R			store all data registers (a-h) to (void*)r (or at literal address if R is 1111)
@@ -1205,6 +1215,7 @@ Debug instructions start with the bits 00101.
 290r	0010 1001 0000 rrrr creg r				Print register r to debug terminal (decimal)
 291r	0010 1001 0001 rrrr cregx r				Print register r to debug terminal (hexadecimal)
 292r	0010 1001 0010 rrrr crega r				Print register r to debug terminal (single ASCII character)
+292r	0010 1001 0010 rrrr cregf r				Print register r to debug terminal (double float)
 298r	0010 1001 1000 rrrr cin r				Pause CPU until a decimal number is entered; put in register r
 299r	0010 1001 1001 rrrr cinx r				Pause CPU until a hexadecimal number is entered; put in register r
 29ar	0010 1001 1010 rrrr cina r				Pause CPU until an ASCII character is entered; put in register r
@@ -1214,10 +1225,10 @@ Debug instructions start with the bits 00101.
 --------------------
 
 'String'
-	insert String as literal, with prefixed two-byte size
+	insert String as literal, with prefixed eight-byte size (no terminator)
 
 "String"
-	insert String as literal, with prefixed two-byte size
+	insert String as literal, with prefixed eight-byte size (no terminator)
 
 0x00-0x3f
 	bit index literal
@@ -1302,16 +1313,14 @@ When the computer initializes, execution begins at 0x0. This is initialized to c
 
 In CHASM, interrupts are used as a bi-directional mode of communication between hardware and software, in addition to communication between software programs. Aside from a handful of interrupts reserved for CPU and ROM use, the interrupt numbers used for communication are chosen by the operating system.
 
-The interrupts table contains only 254 entries of a possible 8-bit indexing space. Interrupt 0 is used to halt the entire system, and its space in memory is taken up by a jmp to 0x2000, called the null jump guard. Interrupt 255 is reserved for responding to pending interrupts that may have accumulated while interrupts are masked.
+The interrupts table contains only 254 entries of a possible 8-bit indexing space. Interrupt 0 is used to halt the entire system, and its space in memory is taken up by a jmp to the start of ROM, called the null jump guard. Interrupt 255 is reserved for responding to pending interrupts that may have accumulated while interrupts are masked.
 
 Pending interrupts are answered in ascending numeric order, so lower-numbered interrupts are considered higher priority.
 
 An IAT entry is as follows:
 
 	1 bit: is the interrupt enabled?
-	1 bit: global vs. local
-		0 = jump target is a flat memory address
-		1 = jump target is a mapped memory address
+	1 bit: unused
 	1 bit: MMT state on entering interrupt?
 		1 = enable, using MMT below
 		0 = disable during interrupt
@@ -1322,15 +1331,17 @@ An IAT entry is as follows:
 	8 bits: device address (for device interrupts)
 	8 bits: mask for each ring (0-7)
 	40 bits unused
-	64 bits address to jump to (memory words)
+	64 bits Interrupt Address ("IA"): address to jump to (memory words)
 	64 bits unused
-	64 bits address of MMT to use during interrupt
+	64 bits Interrupt MMT Pointer ("IMMT"): address of MMT to use during interrupt
 
 To trap an interrupt, simply write an entry on the interrupt address table. When a device's Event Interrupt Number is set (see 8. DEVICE MANAGEMENT TABLE), the DMU automatically overwrites its incoming and outgoing interrupts in the IAT.
 
 The interrupt masks determine which interrupts can fire while the CPU is executing code in the corresponding ring. If a bit is 1, then the interrupt is allowed to fire; otherwise it is simply marked as pending.
 
 By convention, interrupts use registers in descending order for parameter passing, suggesting the mnemonic "register 'H' stands for 'Hardware' interrupts, and register 'A' is for 'Application' data."
+
+IA format: Whether the IA refers to a real or mapped address depends on the other information in the IAT entry. Jumping to the IA is the last step of interrupt activation. Thus it is possible for a mapped interrupt to immediately provoke a page fault.
 
 
 5.1. List of Interrupts
@@ -1359,15 +1370,15 @@ Number		Generator	Registers	Description
 
 5.2.1. Interrupt 0: System Halt
 
-Interrupt 0 halts the entire system.
+Interrupt 0 halts the entire system by setting the H status flag on all CPUs, preventing them from executing any further instructions. It may be used to stop the system in preparation for manual shutdown, or to transfer control to an external debugger. The Vaul power control device (see 10.5.) is the preferred way to finalize powering off the computer.
 
 
 5.2.2. Interrupt 1: DMT Update
 
-Interrupt 1 indicates that the device management table has been modified.
+Interrupt 1 indicates that the device management table (see 8.) has been modified.
 
 
-5.2.3. Interrupt 2: 
+5.2.3. Interrupt 2: Page Fault
 
 Interrupt 2 indicates that an illegal memory access will occur in the next instruction (at ra). This could be because the flags (read/write/execute) don't allow it, or that the page table entry is invalid (in a page file on disk in virtual memory), or that the page table entry doesn't exist. The kernel should trap this and either kill the offending process or load a virtual memory page from a swap device. This interrupt is non-maskable and always enabled.
 	
@@ -1378,21 +1389,35 @@ Interrupt 2 indicates that an illegal memory access will occur in the next instr
 		`load e f; rsh.i e 61; set d 256; lsh d e` in CHAS to get the page size in register d, or,
 		`d = 256 << (realmem.(f) >> 61)` in k-dhar.
 
+
+5.2.4. Interrupt 3: Push Fault
+
 Interrupt 3 indicates that a push instruction (at ra) would result in setting unmapped memory. The kernel should trap this. It may attempt to recover from the error by allocating more stack, or simply kill the process, or patch the instruction to exit the program, etc. Returning from the interrupt will resume execution of the program at the offending instruction. It is non-maskable. If it is disabled, interrupt 2 will fire instead.
+
+
+5.2.5. Interrupt 4: Invalid Table
 
 Interrupt 4 is generated by the CPU when problems are detected with the memory map table, interrupt address table, device map table, or any other table. It is non-maskable and always enabled.
 
+5.2.6. Interrupt 5: Cache Miss
+
 Interrupt 5 indicates that a read or write to mapped but uncached memory has occurred. If it is disabled then the CPU stalls until the cache is filled.
+
+
+5.2.7. Interrupt 6: Timer
 
 Interrupt 6 is trapped to receive timer events. The g register (0-31) matches that provided when the timer was created with interrupt 7.
 
-Interrupt 7 is used to set the next timer event, where register h specifies the number of cycles to the next event, and g indicates the timer ID (0-31). The high bit of register h determines whether the timer will be recurring. Up to 32 timers may be set at a time. If g is the tag of an existing timer and h is 0, that timer is removed.
+
+5.2.8. Interrupt 7: Set Timer
+
+Interrupt 7 is a DCI (see 5.5.6.) that software can call to set the next timer event, where register h specifies the number of cycles to the next event, and g indicates the timer ID (0-31). The high bit of register h determines whether the timer will be recurring. Up to 32 timers may be set at a time. If g is the tag of an existing timer and h is 0, that timer is removed.
 
 
 5.3. OS Interrupts
 ------------------
 
-Interrupts 0x10 through 0x1f are reserved for the system firmware. See 9. HAIDEIA FIRMWARE ROM.
+Interrupts 0x10 through 0x1f are reserved for the system firmware. See 9. RADIX FIRMWARE ROM.
 
 Interrupts 0x20 through 0x9f are available for OS use.
 
@@ -1437,10 +1462,13 @@ By convention, device event interrupt numbers should be mapped within the range 
 Interrupt numbers determine the order in which pending interrupts are answered by the `int 255` instruction, with lower-numbered interrupts always being answered first. An effective system configuration assigns device EINs with this in mind.
 
 
-5.5. IRET Types
----------------
+5.5. Interrupt Types
+--------------------
 
-When an interrupt is fired, there are five different code paths that the CPU may take to push state information onto the stack. Selecting the correct code path depends on whether a Memory Map Table is active before or during the interrupt. CHASM also allows interrupts to jump between code that involves different MMTs, but in all cases, real addresses must be known for the memory map address and the interrupt entry point.
+When an interrupt is fired, there are six different code paths that the CPU may take to transfer control into and out of the interrupt handler. Selecting the correct code path depends on whether a Memory Map Table is active before or during the interrupt, and whether the target is hardware or software. CHASM also allows interrupts to jump between code that involves different MMTs, but in all cases, real addresses must be known for the memory map address and the interrupt entry point (these should be owned or registered by the kernel).
+
+The CPU is considered to be 'in an interrupt' so long as at least one CI flag (bits 16-23) is non-zero.
+
 
 5.5.1. Type A: Mapless
 
@@ -1448,16 +1476,19 @@ In a Type A interrupt, control is transferred from a non-mapped program into a n
 
 When the interrupt fires, it does the following:
 
+	push PC
 	pusha
-	load pc IA			;interrupt address (see 5.)
 	copy ra sp			;back up stack pointer
+	load pc IA			;interrupt address (see 5.)
 
 The interrupt can then go ahead and do its business, likely starting with setting up its own stack.
 
 The IRET instruction reverses the process. The CPU recognizes an IRET should follow the Type A path when the MMR register is empty (i.e., `lmmt 0`) and the M flag is disabled. The Type A IRET does the following:
 
 	copy sp ra			;restore stack pointer
-	popa				;this restores the pc register
+	popa				;restore most registers
+	pop PC				;restore PC
+
 
 5.5.2. Type B: Interrupt Adds Mapping
 
@@ -1465,22 +1496,25 @@ In a Type B interrupt, control is transferred from a non-mapped program into a m
 
 When the interrupt fires, the CHASM CPU detects that the M flag is off, but that the IAT specifies mapping should be used for this interrupt (flag 0x20). The CPU then does the following:
 
+	push PC
 	pusha
-	load pc IA			;interrupt address (see 5.)
-	lmmt IMMT			;interrupt MMT address (see 5.)
 	copy ra sp			;back up stack pointer
-	set status 0x0b		;enable M (memory mapping)
-	clear status 0x18	;disable RM0
-	clear status 0x19	;disable RM1
+	lmmt IMMT			;interrupt MMT address (see 5.)
+	enable status 0x0b	;enable M (memory mapping)
+	disable status 0x18	;disable RM0
+	disable status 0x19	;disable RM1
+	copy pc IA			;interrupt address (see 5.)
 
 When the IRET instruction occurs, the CPU notices that the M flag is enabled and checks RM0 and RM1. To recognize a Type B IRET, both RM0 and RM1 must be 0.
 
 The IRET then does the following:
 
 	lmmt 0				;clear MMR
-	clear status 0x0b	;clear M
+	disable status 0x0b	;clear M
 	copy sp ra			;restore stack pointer
-	popa				;restore all registers
+	popa				;restore general registers
+	pop PC
+
 
 5.5.3. Type C: Map-Escape Interrupt
 
@@ -1488,16 +1522,19 @@ In a Type C interrupt, control is transferred from a program that uses memory ma
 
 When the interrupt fires, the CHASM CPU does the following:
 
+	push PC
 	pusha
-	clear status 0x0b	;disable M (memory mapping)
-	load pc IA			;interrupt address (see 5.)
 	copy ra sp			;back up stack pointer
+	disable status 0x0b	;disable M (memory mapping)
+	copy pc IA			;interrupt address (see 5.)
 
 Returning via the Type C code path occurs when the MMR is non-zero but the CPU's M flag is zero. The IRET statement performs:
 
-	copy sp ra			;restore stack pointer
 	set status 0x0b		;enable M
-	popa				;restore all registers
+	copy sp ra			;restore stack pointer
+	popa				;restore general registers
+	pop PC
+
 
 5.5.4. Type D: Alternate-Map Interrupt
 
@@ -1505,26 +1542,27 @@ In a Type D interrupt, control moves between two different bodies of code that u
 
 Firing the interrupt for a Type D is equivalent to the following:
 
+	push PC
 	pusha
 	push MMR
-	clear status 0x0b	;clear M
-	copy ra sp			;back up stack pointer
+	real ra sp			;get real address of stack pointer
 	lmmt IMMT			;load interrupt's MMT
-	copy pc IA			;load interrupt's entry point
-	set status 0x0b		;set M
-	set status 0x18		;enable RM0
-	clear status 0x19	;disable RM1
+	enable status 0x18	;enable RM0
+	disable status 0x19	;disable RM1
+	copy pc IA			;get mapped address of interrupt's entry point
 
 The decision to IRET via the Type D path is made by noticing that the M flag is enabled, and that the RM0 flag is enabled, but the RM1 flag is disabled. Without the RM0 and RM1 status, the CPU would not be able to distinguish between Type B, C, and E returns.
 
 The IRET of Type D does the following:
 
-	clear status 0x0b	;clear M
-	clear status 0x18	;disable RM0
+	disable status 0x0b	;clear M
+	disable status 0x18	;disable RM0
 	copy sp ra			;restore stack pointer
 	pop MMR				;restore MMT
-	set status 0x0b		;set M
-	popa				;restore all other registers, including pc
+	enable status 0x0b	;set M
+	popa				;restore general registers
+	pop PC
+
 
 5.5.5. Type E: Same-Map Interrupt
 
@@ -1532,21 +1570,32 @@ In a Type E interrupt, control moves from one address to another while preservin
 
 Firing a Type E interrupt is equivalent to:
 
+	push PC
 	pusha
-	clear status 0x0b	;clear M
-	copy ra sp			;back up stack pointer
-	copy pc IA			;jump to interrupt body
-	set status 0x0b		;set M
+	real ra sp			;back up real address of stack pointer
 	set status 0x19		;enable RM1
 	clear status 0x18	;disable RM0
+	copy pc IA			;jump to interrupt body
 
 When the IRET statement is reached, the CPU recognizes a Type E IRET by noticing the M and RM1 status are enabled, but the RM0 flag is disabled. It then executes:
 
 	clear status 0x19	;disable RM1
 	clear status 0x0b	;clear M
-	copy sp ra			;restore stack pointer
+	copy sp ra			;restore stack pointer to real address
+	popa				;restore virtual address of stack pointer, etc.
 	set status 0x0b		;set M
-	popa
+	pop PC
+
+While it may seem that the type E path could be the same as the type A (mapless) path, ensuring the ra register always contains a real-memory address provides a useful hint to the kernel about what addresses need to be kept in memory during the interrupt. If the interrupt handler wishes to return a value to the calling process, it can do so by modifying the pushed register backup at the current SP.
+
+
+5.5.6. Type F: Device Control Interrupt
+
+CHASM also uses the `int` message to send the current state of all system registers to devices. This usage is called a device control interrupt, or DCI. To use a DCI, both the DMT (see 8.) and the IAT (see 5.) must agree that the interrupt number (EIN + 1) is available for the device's use.
+
+Unlike the other types of interrupts, DCIs cause no change in flow. Some DCIs are synchronous (the CPU pauses to wait for a response) while others are asynchronous (the device sends a DEI with its response at a later time.) Most DCIs are asynchronous, allowing the system to continue processing while the device generates a response, if appropriate. (Some DCIs yield no response at all.) Synchronous DCIs are used sparingly for very fast (i.e. "on-die") operations, like getting the time from Lithrai (10.12.), or a random number from Ellinill (10.13.), and typically impair performance by only a few clock cycles at most.
+
+DEIs (Device Event Interrupts) do not have a unique control flow pattern; they may have any handling type, depending on how the IAT is configured.
 
 
 ===================
@@ -1749,10 +1798,10 @@ In the specific device signatures provided in 10. SPECIFIC DEVICES, complete sig
 When a device's event interrupt number is set, the DMU automatically fills out its entries in the interrupts table (see 5. INTERRUPTS TABLE).
 
 =======================
-9. HAIDEIA FIRMWARE ROM
+9. RADIX FIRMWARE ROM
 =======================
 
-The HAIDEIA firmware is a control program and setup utility similar to PC BIOS and mainframe ROM monitors. It provides:
+The RADIX firmware is a control program and setup utility similar to PC BIOS and mainframe ROM monitors. It provides:
 
  - A menu-based configuration user interface
  - Locating and bootstrapping bootable drives
@@ -1807,9 +1856,9 @@ Opening the configuration UI will overwrite the interrupt table and is not trivi
 9.3. Recovery Environment
 -------------------------
 
-The Recovery Environment is a command-line program accessible from within the Haideia firmware. It includes a partial implementation of the Petra filesystem (http://lethe.rhetori.ca/petra-fs.txt). Its purpose is to assist in the configuration and maintenance of storage devices.
+The Recovery Environment is a command-line program accessible from within the Radix firmware. It includes a partial implementation of the Petra filesystem (http://lethe.rhetori.ca/petra-fs.txt). Its purpose is to assist in the configuration and maintenance of storage devices.
 
-Unlike the rest of the Haideia firmware, where configuration changes must be saved to NVRAM, changes performed in the Recovery Environment are committed to disk immediately.
+Unlike the rest of the Radix firmware, where configuration changes must be saved to NVRAM, changes performed in the Recovery Environment are committed to disk immediately.
 
 The <path> syntax is identical to that used by the LETHE operating system, using forward slashes as separators, e.g. "/path/to/file", and allowing Unix-like relative paths such as "..", "../sibling", "child", or "./child/grandchild".
 
@@ -1865,7 +1914,7 @@ b			boot <drive>
 Boot <drive>
 
 u			update-firmware [<partition>:]<path>
-Flash new version of Haideia firmware
+Flash new version of Radix firmware
 
 h			halt
 s			shutdown
@@ -1873,7 +1922,7 @@ o			off
 Turn off computer
 
 q			quit
-Return to Haideia menu
+Return to Radix menu
 
 r			reboot
 Restart computer
@@ -2341,9 +2390,9 @@ The system firmware has the device signature:
 
 When the system initializes, the DMU automatically maps the ROM's 240 pages into the 0x03000-0x1ffff range. The underlying RAM cannot be accessed while the ROM is mapped here. The OS may later unload it if desired, but the code is not relocatable as it expects to be at a fixed address.
 
-The firmware generates and accepts a variety of interrupts in the range 0x10 to 0x1f. See 9. HAIDEIA FIRMWARE ROM for more information.
+The firmware generates and accepts a variety of interrupts in the range 0x10 to 0x1f. These are software interrupts handled by the code in the firmware image. See 9. RADIX FIRMWARE ROM for more information.
 
-The ROM device uses interrupts 0x10 through 0x1f, and defaults to having its event interrupt field prepopulated with 0x10. Any other value disables its interrupts.
+The ROM device defaults to having its event interrupt field prepopulated with 0x10. It is special in that assigning any other value will disable its handling of interrupts.
 
 
 10.11. CPU
@@ -2358,7 +2407,7 @@ The CHASM CPU itself is a DMU-mapped device. It appears in the DMT as:
 
 It maps 1 page, which contains 128 bytes describing the entire current register state for that CPU.
 
-This is important when working with a multiple-CPU system, as interrupts can be used to send commands from one CPU to another.
+This is valuable when working with a multi-processor system, as interrupts can be used to send commands from one CPU to another.
 
 The first CPU is always mapped to system device 0, and is considered the primary processor of the system. This means it can receive interrupts (c0) from the other CPUs, which are termed secondary processors.
 
