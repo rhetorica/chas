@@ -1,11 +1,13 @@
 #ifndef OPCODE_H
 #define OPCODE_H
 
+extern int gen_opcode_table;
+
 struct opcode {
 	unsigned short number;
 	const char* text;
     unsigned short emission;
-    unsigned long format;
+    unsigned long long format;
 };
 
 // opcode is nullary:
@@ -41,11 +43,27 @@ struct opcode {
 // opcode lit is an address:
 #define O_LIT_REF       0x00008000
 // opcode needs to be implemented properly:
-#define O_UNFINISHED    0xff000000
+#define O_UNFINISHED    0xff00000000000000
 // opcode only takes literal:
 #define O_LIT_ONLY      0x00010000
 // opcode takes 3 registers in the last 9 bits:
 #define O_ARITHMETIC_TRIO 0x00020000
+// opcode manipulates a 16-bit data value
+#define O_PROC_16 0x00040000
+// opcode manipulates a 32-bit data value
+#define O_PROC_32 0x00080000
+// opcode manipulates a 64-bit data value (not used by assembler):
+#define O_PROC_64 0x00100000
+// opcode manipulates a 128-bit data value (not used by assembler):
+#define O_PROC_128 0x00200000
+// opcode dereferences the value in the second register (not used by assembler):
+#define O_REF_REG 0x00400000
+// opcode dereferences the second argument (not used by assembler):
+#define O_REF_ANY_MASK 0x00408000
+// opcode is an alias (don't emit in optable):
+#define O_ALIAS 0x00800000
+// opcode may not take STATUS as second operand:
+#define O_STATUS_FORBIDDEN_2 0x01000000
 
 
 void init_opcodes();

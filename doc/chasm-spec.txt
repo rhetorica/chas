@@ -351,31 +351,31 @@ R, S, T: registers, but 1111 is reserved (usually means load a trailing literal)
 ?: any (for specifying groups of instructions; both possibilities defined)
 
 Word	Bitmask				CHAS Mnemonic		Description
-00**	0000 0000 **** ****	null				do nothing
+00**	0000 0000 0000 0000	null				do nothing
 018R	0000 0001 1000 RRRR	push R				push register r, or literal
 014R	0000 0001 0100 RRRR	push.d R			push lower half of register r (double word), or literal
 012R	0000 0001 0010 RRRR	push.w R			push lower quarter of register r (16-bit word), or literal
 028r	0000 0010 1000 rrrr	pop r				pop register r
 024r	0000 0010 0100 rrrr	pop.d r				pop lower half of register r (double word)
 022r	0000 0010 0010 rrrr	pop.w r				pop lower quarter register r (16-bit word)
-013f	0000 0001 0011 1111	push.a				push all registers to stack except pc
-023f	0000 0010 0011 1111	pop.a				pop all registers from stack except pc
+013f	0000 0001 0011 1111	push.a				push all registers to stack except pc and status
+023f	0000 0010 0011 1111	pop.a				pop all registers from stack except pc and status
 011f	0000 0001 0001 1111	push.h				push all data registers (a-h) to stack
 021f	0000 0010 0001 1111	pop.h				pop all data registers (a-h) from stack
 03**	0000 0011 **** **** 					unused
-043R	0000 0100 **11 RRRR	load.a R			load all registers from (void*)r (or from literal address if R is 1111)
+043R	0000 0100 **11 RRRR	load.a R			load all registers except pc and status from (void*)r (or from literal address if R is 1111)
 041R	0000 0100 **01 RRRR	load.h R			load all data registers (a-h) from (void*)r (or from literal address if R is 1111)
 05**	0000 0101 SSSS rrrr real r S			populate r with real (flat) memory address from virtual address in register S, or -1 if unmapped
 05f*	0000 0101 1111 rrrr real.i r <address>	as `real`, but with literal address
-06**	0000 0110 SSSS rrrr unreal r S			UNIMPLEMENTED - populate r with virtually mapped memory address corresponding to real (flat) location S
-06f*	0000 0110 1111 rrrr	unreal.i r <address>	UNIMPLEMENTED - as `unreal`, but with literal address
+06**	0000 0110 SSSS rrrr unreal r S			populate r with virtually mapped memory address corresponding to real (flat) location S
+06f*	0000 0110 1111 rrrr	unreal.i r <address>	as `unreal`, but with literal address
 07**	0000 0111 **** ****						unused
-083R	0000 1000 **11 RRRR	store.a R			store all registers at (void*)r (or at literal address if R is 1111)
+083R	0000 1000 **11 RRRR	store.a R			store all registers except pc and status at (void*)r (or at literal address if R is 1111)
 081R	0000 1000 **01 RRRR	store.h R			store all data registers (a-h) to (void*)r (or at literal address if R is 1111)
 09**	0000 1001 **** **** 					unused
 0a**	0000 1010 **** ****						unused
 0bsr	0000 1011 ssss rrrr cdr r s				CHASMv2 get s.d and store in r.a (CONS shadow decrement register)
-												-- if r is 'status', becomes `flip s` #NEW#
+												-- if r is 'status', becomes `flip s`
 0bsf	0000 1011 ssss 1111 flip s				CHASMv2 swap value of s.a and s.d (CONS shadow decrement register)
 0csr	0000 1100 ssss rrrr	copy r s			copy value from s into r
 0dsr	0000 1101 ssss rrrr	unused
@@ -1331,17 +1331,15 @@ An IAT entry is as follows:
 	8 bits: device address (for device interrupts)
 	8 bits: mask for each ring (0-7)
 	40 bits unused
-	64 bits Interrupt Address ("IA"): address to jump to (memory words)
+	64 bits address to jump to (memory words)
 	64 bits unused
-	64 bits Interrupt MMT Pointer ("IMMT"): address of MMT to use during interrupt
+	64 bits address of MMT to use during interrupt
 
 To trap an interrupt, simply write an entry on the interrupt address table. When a device's Event Interrupt Number is set (see 8. DEVICE MANAGEMENT TABLE), the DMU automatically overwrites its incoming and outgoing interrupts in the IAT.
 
 The interrupt masks determine which interrupts can fire while the CPU is executing code in the corresponding ring. If a bit is 1, then the interrupt is allowed to fire; otherwise it is simply marked as pending.
 
 By convention, interrupts use registers in descending order for parameter passing, suggesting the mnemonic "register 'H' stands for 'Hardware' interrupts, and register 'A' is for 'Application' data."
-
-IA format: Whether the IA refers to a real or mapped address depends on the other information in the IAT entry. Jumping to the IA is the last step of interrupt activation. Thus it is possible for a mapped interrupt to immediately provoke a page fault.
 
 
 5.1. List of Interrupts
@@ -1467,7 +1465,19 @@ Interrupt numbers determine the order in which pending interrupts are answered b
 
 When an interrupt is fired, there are six different code paths that the CPU may take to transfer control into and out of the interrupt handler. Selecting the correct code path depends on whether a Memory Map Table is active before or during the interrupt, and whether the target is hardware or software. CHASM also allows interrupts to jump between code that involves different MMTs, but in all cases, real addresses must be known for the memory map address and the interrupt entry point (these should be owned or registered by the kernel).
 
-The CPU is considered to be 'in an interrupt' so long as at least one CI flag (bits 16-23) is non-zero.
+In summary, the types are:
+
+Type	Name		Example Scenario
+A		Mapless		Kernel calls or interrupts itself
+B		Map-Add		Kernel delegates task to driver or system service
+C		Map-Escape	User process calls or triggers kernel; user process yields/exits
+D		Alt-Map		User process calls driver or system service
+E		Same-Map	User process interrupts self
+F		Device		Control signal sent to device (no change of flow control)
+
+To return data from inside an interrupt, solutions vary. Type F interrupts may directly set system registers when they finish. Type A, C, and E interrupts may access the stored register values of the original context by manipulating the stack. Type B and D interrupts (calls into drivers/system services) have no such access and may need to arrange for use of shared memory with kernel-specific APIs.
+
+DEIs (Device Event Interrupts) do not have a unique control flow pattern; they may have any handling type, depending on how the IAT is configured.
 
 
 5.5.1. Type A: Mapless
@@ -1476,18 +1486,16 @@ In a Type A interrupt, control is transferred from a non-mapped program into a n
 
 When the interrupt fires, it does the following:
 
-	push PC
 	pusha
-	copy ra sp			;back up stack pointer
 	load pc IA			;interrupt address (see 5.)
+	copy ra sp			;back up stack pointer
 
 The interrupt can then go ahead and do its business, likely starting with setting up its own stack.
 
 The IRET instruction reverses the process. The CPU recognizes an IRET should follow the Type A path when the MMR register is empty (i.e., `lmmt 0`) and the M flag is disabled. The Type A IRET does the following:
 
 	copy sp ra			;restore stack pointer
-	popa				;restore most registers
-	pop PC				;restore PC
+	popa				;this restores the pc register
 
 
 5.5.2. Type B: Interrupt Adds Mapping
@@ -1496,14 +1504,13 @@ In a Type B interrupt, control is transferred from a non-mapped program into a m
 
 When the interrupt fires, the CHASM CPU detects that the M flag is off, but that the IAT specifies mapping should be used for this interrupt (flag 0x20). The CPU then does the following:
 
-	push PC
 	pusha
+	load pc IA			;interrupt address (see 5.)
 	copy ra sp			;back up stack pointer
 	lmmt IMMT			;interrupt MMT address (see 5.)
 	enable status 0x0b	;enable M (memory mapping)
 	disable status 0x18	;disable RM0
 	disable status 0x19	;disable RM1
-	copy pc IA			;interrupt address (see 5.)
 
 When the IRET instruction occurs, the CPU notices that the M flag is enabled and checks RM0 and RM1. To recognize a Type B IRET, both RM0 and RM1 must be 0.
 
@@ -1512,8 +1519,7 @@ The IRET then does the following:
 	lmmt 0				;clear MMR
 	disable status 0x0b	;clear M
 	copy sp ra			;restore stack pointer
-	popa				;restore general registers
-	pop PC
+	popa				;restore all registers
 
 
 5.5.3. Type C: Map-Escape Interrupt
@@ -1522,18 +1528,16 @@ In a Type C interrupt, control is transferred from a program that uses memory ma
 
 When the interrupt fires, the CHASM CPU does the following:
 
-	push PC
 	pusha
 	copy ra sp			;back up stack pointer
 	disable status 0x0b	;disable M (memory mapping)
-	copy pc IA			;interrupt address (see 5.)
+	load pc IA			;interrupt address (see 5.)
 
 Returning via the Type C code path occurs when the MMR is non-zero but the CPU's M flag is zero. The IRET statement performs:
 
 	set status 0x0b		;enable M
 	copy sp ra			;restore stack pointer
-	popa				;restore general registers
-	pop PC
+	popa				;restore all registers
 
 
 5.5.4. Type D: Alternate-Map Interrupt
@@ -1542,14 +1546,13 @@ In a Type D interrupt, control moves between two different bodies of code that u
 
 Firing the interrupt for a Type D is equivalent to the following:
 
-	push PC
 	pusha
 	push MMR
 	real ra sp			;get real address of stack pointer
 	lmmt IMMT			;load interrupt's MMT
+	unreal.i pc IA		;get mapped address of interrupt's entry point
 	enable status 0x18	;enable RM0
 	disable status 0x19	;disable RM1
-	copy pc IA			;get mapped address of interrupt's entry point
 
 The decision to IRET via the Type D path is made by noticing that the M flag is enabled, and that the RM0 flag is enabled, but the RM1 flag is disabled. Without the RM0 and RM1 status, the CPU would not be able to distinguish between Type B, C, and E returns.
 
@@ -1560,8 +1563,7 @@ The IRET of Type D does the following:
 	copy sp ra			;restore stack pointer
 	pop MMR				;restore MMT
 	enable status 0x0b	;set M
-	popa				;restore general registers
-	pop PC
+	popa				;restore all other registers, including pc
 
 
 5.5.5. Type E: Same-Map Interrupt
@@ -1570,23 +1572,21 @@ In a Type E interrupt, control moves from one address to another while preservin
 
 Firing a Type E interrupt is equivalent to:
 
-	push PC
 	pusha
-	real ra sp			;back up real address of stack pointer
+	clear status 0x0b	;clear M
+	copy ra sp			;back up stack pointer
+	copy pc IA			;jump to interrupt body
+	set status 0x0b		;set M
 	set status 0x19		;enable RM1
 	clear status 0x18	;disable RM0
-	copy pc IA			;jump to interrupt body
 
 When the IRET statement is reached, the CPU recognizes a Type E IRET by noticing the M and RM1 status are enabled, but the RM0 flag is disabled. It then executes:
 
 	clear status 0x19	;disable RM1
 	clear status 0x0b	;clear M
-	copy sp ra			;restore stack pointer to real address
-	popa				;restore virtual address of stack pointer, etc.
+	copy sp ra			;restore stack pointer
 	set status 0x0b		;set M
-	pop PC
-
-While it may seem that the type E path could be the same as the type A (mapless) path, ensuring the ra register always contains a real-memory address provides a useful hint to the kernel about what addresses need to be kept in memory during the interrupt. If the interrupt handler wishes to return a value to the calling process, it can do so by modifying the pushed register backup at the current SP.
+	popa
 
 
 5.5.6. Type F: Device Control Interrupt
@@ -1594,8 +1594,6 @@ While it may seem that the type E path could be the same as the type A (mapless)
 CHASM also uses the `int` message to send the current state of all system registers to devices. This usage is called a device control interrupt, or DCI. To use a DCI, both the DMT (see 8.) and the IAT (see 5.) must agree that the interrupt number (EIN + 1) is available for the device's use.
 
 Unlike the other types of interrupts, DCIs cause no change in flow. Some DCIs are synchronous (the CPU pauses to wait for a response) while others are asynchronous (the device sends a DEI with its response at a later time.) Most DCIs are asynchronous, allowing the system to continue processing while the device generates a response, if appropriate. (Some DCIs yield no response at all.) Synchronous DCIs are used sparingly for very fast (i.e. "on-die") operations, like getting the time from Lithrai (10.12.), or a random number from Ellinill (10.13.), and typically impair performance by only a few clock cycles at most.
-
-DEIs (Device Event Interrupts) do not have a unique control flow pattern; they may have any handling type, depending on how the IAT is configured.
 
 
 ===================

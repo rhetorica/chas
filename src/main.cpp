@@ -98,6 +98,172 @@ int main(int argc, char* argv[]) {
 					o = o->next;
 				}
 				printf("\n");
+			} else if(strcmp(chars, "optable") == 0) {
+				link<opcode>* o = opcodes;
+				const char* empty_string = "";
+				const char regname[16][7] = {
+					"a", "b", "c", "d",
+					"e", "f", "g", "h",
+					"pc", "ra", "sb", "sp",
+					"db", "cb", "pi", "status"
+				};
+				char bstr[8];
+				char functext[16];
+				char r0, r1, r2, vp, ap, skip, w;
+				unsigned short b;
+				unsigned long long v;
+				r0 = 0;
+				r1 = 0;
+				r2 = 0;
+				vp = ap = 0;
+				v = 0x0;
+				b = 0x0;
+				skip = w = 0;
+				while(o != NULL) {
+					unsigned long long F = o->child->format;
+					if(F & O_ALIAS) {
+						o = o->next;
+						continue;
+					}
+
+					unsigned short base_emission = o->child->emission;
+
+					strcpy(functext, o->child->text);
+					int ht = strlen(o->child->text);
+					int hi = 0;
+					int tail_valid = 0; // keep tail? (these instruction variants can't differentiated by optable attributes alone)
+					int tail_start = -1;
+					while(hi < ht) {
+						char c = o->child->text[hi];
+						if(c == '.') {
+							tail_start = hi;
+						} else if(~tail_start) {
+							if(c != 'q' && c != 'd' && c != 'r' && c != 'w' && c != 'i' && c != 's')
+								tail_valid = 1;
+						}
+						++hi;
+					}
+
+					if(base_emission & 0xff00 == 0x1800) // rep.* codes
+						tail_valid = 1;
+					else if(strcmp(functext, "ccmp.de") == 0 || strcmp(functext, "ccmp.we") == 0)
+						strcpy(functext, "ccmp_e");
+					
+					if(~tail_start)
+						functext[tail_start] = (tail_valid ? '_' : '\0');
+					
+					/*
+						each opcode is implemented as:
+
+						void op_????(char r0, char r1, char r2, char b, regt v, bool vp, bool ap, char skip, char w) {
+
+						}
+					*/
+
+					#define PC 0x08
+
+					skip = w = 0;
+
+					if(F & O_LIT_64) {
+						skip = 4;
+						r1 = PC;
+					} else if(F & O_LIT_32) {
+						skip = 2;
+						r1 = PC;
+					} else if(F & O_LIT_16) {
+						skip = 1;
+						r1 = PC;
+					} else {
+						skip = 0;
+					}
+
+					if(F & O_PROC_64) {
+						w = 4;
+					} else if(F & O_PROC_32) {
+						w = 2;
+					} else if(F & O_PROC_16) {
+						w = 1;
+					} else {
+						w = 0;
+					}
+
+					if(F & O_REF_ANY_MASK)
+						ap = 1;
+					else
+						ap = 0;
+
+					#define EMIT_OPTABLE(final_emission, rr0, rr1, rr2, rb, rvp, rap, rskip, rw, rsub0, rsub1, rsub2) \
+					printf("\t{0x%04llx, &op_%s,\t%3d, %3d, %3d, 0x%02x, %d, %d, %d, %d, 0x%016llx}, // %s %s %s %s \n", \
+						final_emission, functext, rr0, rr1, rr2, rb, rvp, rap, rskip, rw, F, o->child->text, rsub0, rsub1, rsub2);
+					
+					if(F & O_MONO) {
+						for(r0 = 0; r0 < 16; r0++) {
+							if((F & O_STATUS_FORBIDDEN) && r0 == 15)
+								continue;
+							
+							if(F & O_DUO) {
+								for(r1 = 0; r1 < 16; r1++) {
+									if((F & O_STATUS_FORBIDDEN_2) && r1 == 15)
+										continue;
+									EMIT_OPTABLE(base_emission | (r1 << 4) | r0, r0, r1, 0xff, 0xff, vp, ap, skip, w, regname[r0], regname[r1], empty_string);
+								}
+							} else if(F & O_FLAG) {
+								for(b = 0; b < 64; b++) {
+									itoa(b, bstr, 10);
+									EMIT_OPTABLE(base_emission | (b << 4) | r0, r0, 0xff, 0xff, b, vp, ap, skip, w, regname[r0], bstr, empty_string);
+								}
+							} else {
+								EMIT_OPTABLE(base_emission | r0, r0, 0xff, 0xff, 0xff, vp, ap, skip, w, regname[r0], empty_string, empty_string);
+							}
+						}
+					} else if(F & O_MONO_OR_LIT) {
+						for(r0 = 0; r0 < 15; r0++) {
+							EMIT_OPTABLE(base_emission | r0, r0, 0xff, 0xff, 0xff, 0, 0, 0, w, regname[r0], empty_string, empty_string);
+						}
+						EMIT_OPTABLE(base_emission | 0xf, r1, 0xff, 0xff, 0xff, 0, 0, skip, w, "<literal>", empty_string, empty_string);
+
+					} else if(F & O_MONO_AND_LIT) {
+						for(r0 = 0; r0 < 16; r0++) {
+							EMIT_OPTABLE(base_emission | r0, r0, PC, 0xff, 0xff, vp, ap, skip, w, regname[r0], "<literal>", empty_string);
+						}
+					} else if(F & O_DUO_ONLY) {
+						for(r1 = 0; r1 < 16; r1++) {
+							if((F & O_STATUS_FORBIDDEN_2) && r1 == 15)
+								continue;
+							EMIT_OPTABLE(base_emission | (r1 << 4), 0xff, r1, 0xff, 0xff, vp, ap, skip, w, regname[r1], empty_string, empty_string);
+						}
+					} else if(F & O_OPT_IMM_8) {
+						for(b = 0; b < 256; b++) {
+							itoa(b, bstr, 10);
+							EMIT_OPTABLE(base_emission | b, 0xff, 0xff, 0xff, b, 0, 0, 0, 0, bstr, empty_string, empty_string);
+						}
+
+					} else if(F & O_ARITHMETIC_TRIO) {
+						for(r2 = 0; r2 < 8; r2++)
+							for(r1 = 0; r1 < 8; r1++)
+								for(r0 = 0; r0 < 8; r0++) {
+									EMIT_OPTABLE(base_emission | (r2 << 6) | (r1 << 3) | r0, r0, r1, r2, 0xff, vp, ap, skip, w, regname[r0], regname[r1], regname[r2]);
+								}
+
+					} else if(F & O_ARITHMETIC_DUO) {
+						for(r1 = 0; r1 < 8; r1++)
+							for(r0 = 0; r0 < 8; r0++) {
+								EMIT_OPTABLE(base_emission | (r1 << 3) | r0, r0, r1, 0xff, 0xff, vp, ap, skip, w, regname[r0], regname[r1], empty_string);
+							}
+
+					} else if(F & O_ARITHMETIC_LIT) {
+						for(r0 = 0; r0 < 8; r0++) {
+							EMIT_OPTABLE(base_emission | r0, r0, PC, 0xff, 0xff, vp, ap, skip, w, regname[r0], "<literal>", empty_string);
+						}
+
+					} else if(F == O_ZERO) {
+						r0 = r1 = r2 = 0;
+						EMIT_OPTABLE(base_emission, 0xff, 0xff, 0xff, 0xff, 0, 0, skip, w, empty_string, empty_string, empty_string);
+					}
+
+					o = o->next;
+				}
+				printf("\n");
 			} else if(strcmp(chars, "base") == 0) {
 				++argi;
 				if(argi < argc) {

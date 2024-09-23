@@ -2,7 +2,7 @@
     #define MAIN_HPP
     #define VERSION "0.0.1"
     #define NOWHERE (size_t)(-1)
-    #define START_ADDRESS 0x3000
+    #define START_ADDRESS 0xf000000000000000
 
     #include <stdio.h>
     #include <string.h>
