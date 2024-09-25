@@ -14,7 +14,7 @@
                                Pharos Computer Inc
 
                                Created: 2024-08-19
-                               Updated: 2024-09-18
+                               Updated: 2024-09-24
 
 
 
@@ -51,6 +51,7 @@ CONTENTS
   3.7. Optimization
 4. ADDRESSING
   4.1. Reserved Addresses
+  4.2. Memory Banks
 5. INTERRUPT ADDRESS TABLE
   5.1. List of Interrupts
   5.2. System Interrupts
@@ -402,19 +403,19 @@ Word	Bitmask				CHAS Mnemonic		Description
 
 18??	0001 1000 ???? ????						'rep' instructions (see 3.3.)
 
-19Sr	0001 1001 SSSS 0rrr	load.c r S			CHASMv2 load 64 bits from (void*)s into r.d (r must be a-h) #NEW#
-1aSr	0001 1010 SSSS 0rrr	store.c r S			CHASMv2 store 64 bits to (void*)s from r.d (r must be a-h) #NEW#
-19fr	0001 1001 1111 0rrr	load.ci r <addr>	CHASMv2 load 64 bits from <addr> into r.d (r must be a-h) #NEW#
-1afr	0001 1010 1111 0rrr	store.ci r <addr>	CHASMv2 store 64 bits to <addr> from r.d (r must be a-h) #NEW#
-1dSr	0001 1101 SSSS 0rrr	load.o r S			CHASMv2 load 128 bits from (void*)s into r and r.d (r must be a-h) #NEW#
+19Sr	0001 1001 SSSS 0rrr	load.c r S			CHASMv2 load 64 bits from (void*)s into r.d (r must be a-h)
+1aSr	0001 1010 SSSS 0rrr	store.c r S			CHASMv2 store 64 bits to (void*)s from r.d (r must be a-h)
+19fr	0001 1001 1111 0rrr	load.ci r <addr>	CHASMv2 load 64 bits from <addr> into r.d (r must be a-h)
+1afr	0001 1010 1111 0rrr	store.ci r <addr>	CHASMv2 store 64 bits to <addr> from r.d (r must be a-h)
+1dSr	0001 1101 SSSS 0rrr	load.o r S			CHASMv2 load 128 bits from (void*)s into r and r.d (r must be a-h)
 1dSr	0001 1101 SSSS 0rrr	follow.a r S		CHAS synonym for load.o
-1eSr	0001 1110 SSSS 0rrr	store.o r S			CHASMv2 store 128 bits to (void*)s from r and r.d (r must be a-h) #NEW#
-1dfr	0001 1101 1111 0rrr	load.oi r <addr>	CHASMv2 load 128 bits from <addr> into r and r.d (r must be a-h) #NEW#
-1efr	0001 1110 1111 0rrr	store.oi r <addr>	CHASMv2 store 128 bits to <addr> from r and r.d (r must be a-h) #NEW#
-1cSr	0001 1100 SSSS 0rrr	load.co r S			CHASMv2 load 128 bits from (void*)s.d into r and r.d (r must be a-h) #NEW#
+1eSr	0001 1110 SSSS 0rrr	store.o r S			CHASMv2 store 128 bits to (void*)s from r and r.d (r must be a-h)
+1dfr	0001 1101 1111 0rrr	load.oi r <addr>	CHASMv2 load 128 bits from <addr> into r and r.d (r must be a-h)
+1efr	0001 1110 1111 0rrr	store.oi r <addr>	CHASMv2 store 128 bits to <addr> from r and r.d (r must be a-h)
+1cSr	0001 1100 SSSS 0rrr	load.co r S			CHASMv2 load 128 bits from (void*)s.d into r and r.d (r must be a-h)
 1cSr	0001 1100 SSSS 0rrr	follow.d r S		CHAS synonym for load.co
-1fSr	0001 1111 SSSS 0rrr	store.co r S		CHASMv2 store 128 bits to (void*)s.d from r and r.d (r must be a-h) #NEW#
-1bSr	0001 1011 SSSS 0rrr	setcdr r S			CHASMv2 copy value of s.a into r.d (r must be a-h) #NEW#
+1fSr	0001 1111 SSSS 0rrr	store.co r S		CHASMv2 store 128 bits to (void*)s.d from r and r.d (r must be a-h)
+1bSr	0001 1011 SSSS 0rrr	setcdr r S			CHASMv2 copy value of s.a into r.d (r must be a-h)
 
 
 2vvr	0010 00vv vvvv rrrr	disable r v			clear bit v in r
@@ -1215,7 +1216,7 @@ Debug instructions start with the bits 00101.
 290r	0010 1001 0000 rrrr creg r				Print register r to debug terminal (decimal)
 291r	0010 1001 0001 rrrr cregx r				Print register r to debug terminal (hexadecimal)
 292r	0010 1001 0010 rrrr crega r				Print register r to debug terminal (single ASCII character)
-292r	0010 1001 0010 rrrr cregf r				Print register r to debug terminal (double float)
+293r	0010 1001 0011 rrrr cregf r				Print register r to debug terminal (double float)
 298r	0010 1001 1000 rrrr cin r				Pause CPU until a decimal number is entered; put in register r
 299r	0010 1001 1001 rrrr cinx r				Pause CPU until a hexadecimal number is entered; put in register r
 29ar	0010 1001 1010 rrrr cina r				Pause CPU until an ASCII character is entered; put in register r
@@ -1306,6 +1307,29 @@ The following addresses in flat memory are reserved. Each address indicates the 
 	0x 0000 0000 0002 0000 - beginning of bootloader code
 
 When the computer initializes, execution begins at 0x0. This is initialized to contain the null jump guard, which is a `jmp 0x3000` instruction that moves execution to the start of the firmware. The RAM shadowed by the firmware is inaccessible unless the firmware is unloaded.
+
+
+4.2. Memory Banks
+-----------------
+
+Physical memory in CHASM is laid out in banks, with one assigned to each device. There are 256 banks in total (00-ff), with the bank number matching the DMT index (described in 8.) of the source of the memory. The size of each bank is specified by the memory bank length field in the DMT, which may be up to 5 bytes (i.e., 2 terabytes.)
+
+Physical memory addresses have the format:
+
+	0x 0000 rrss ssss ssss
+
+where rr is the bank number (00-ff) and ssssssssss is the address within the bank. The top 16 bits are reserved for tagging pointers for software use.
+
+Since most devices do not map memory, and very rarely will a device use all 2 TB of its budgeted window, most memory addresses are invalid.
+
+In a typical configuration:
+
+	bank 00 = main system RAM
+	bank 01 = primary CPU register list
+	bank 02 = RADIX ROM
+	bank 06 = video memory
+
+
 
 ==========================
 5. INTERRUPT ADDRESS TABLE
@@ -1705,8 +1729,8 @@ The entries are structured as follows:
 
 	PRSWM.wr IFVQApUG  <manufac turer_#>  <product /driver>  <rev###> <event#>
 	........ ........  ........ ........  <tempera ture###>  <power## #######>
-	........ ........  ........ ........  ........ <DMA_pag  es###### #######>
-	........ .<DMA_st  art##### ########  ######## ########  ######## #######>
+	........ ........  ........ <memory_  bank_len gth#####  ######## #######>
+	........ ........  ........ ........  ........ ........  ........ ........
 	
 
 	word 0:
@@ -1741,6 +1765,7 @@ The entries are structured as follows:
 	word 2:
 	| 2 bytes product ID, indicating driver to use
 		0x0001 = CPU
+		0x0002 = RAM
 		0x0005 = real-time clock
 		0x0010 = random number generator
 		0x0102 = ROM
@@ -1777,14 +1802,11 @@ The entries are structured as follows:
 		default = 0x0000 (0 Watts)
 	word 8:
 	| 2 bytes unused
-	word 9:
-	| 2 bytes unused
-	words 10-11:
+	word 9-11:
 	| 1 byte unused
-	| 3 bytes memory map size (in 512-word = 1024-byte pages; max 16 GB)
+	| 5 bytes memory bank length (in words; max 2 TB); see 4.2.
 	words 12-15:
-	| 9 bits unused
-	| 55 bits start address in flat memory (in 512-word = 1024-byte pages) (writable)
+	| 8 bytes unused
 	
 The event interrupt is the interrupt that the device generates when it has something to report to the system. The control interrupt is derived by adding 1 to the number of the event interrupt, and will be trapped by the device itself for sending it commands.
 
@@ -1794,6 +1816,9 @@ In the specific device signatures provided in 10. SPECIFIC DEVICES, complete sig
  - The ROM device (see 10.10.) uses interrupts 0x10 through 0x1f, and defaults to having its event interrupt field prepopulated with 0x10. Any other value disables firmware interrupts.
 
 When a device's event interrupt number is set, the DMU automatically fills out its entries in the interrupts table (see 5. INTERRUPTS TABLE).
+
+See 4.2. for more information on memory banks.
+
 
 =======================
 9. RADIX FIRMWARE ROM
@@ -1937,32 +1962,33 @@ As of this writing, it is not certain that all these features will fit within th
 
 The ATHARTI video system has the device management table signature:
 
-	c08c 0001 1000 01d0
+	c88a 008b 1000 01d0
 	0000 0000 0ba5 0000
-	0000 0000 0000 8000
+	0000 0000 0100 0000
 	0000 0000 0000 0000
 
-It maps 32 MB (32,768 pages) of memory, which is write-only (the video system can only read it.)
+It maps 32 MB (32,768 pages) of memory, generally starting at 0x060000000000.
 
-Video memory begins with the following 8-byte data structure:
+Video memory begins with the following 16-byte data structure:
 
 	1 byte refresh rate (Hz)
 		default = 0x3c (60 FPS)
-	2 bytes screen width
-		default = 0x0460 (1120 px)
-	2 bytes screen height
-		default = 0x0340 (832 px)
 	1 byte pixel format:
 		0x00 = bitmap (1 bpp)
 		0x01 = 16 colors (4 bpp)
 		0x02 = 3-bit R, 3-bit G, 2-bit B (8 bpp)
 		0x03 = 5-bit R, 6-bit G, 5-bit B (16 bpp)
 		0x04 = 8-bit R, 8-bit G, 8-bit B (24 bpp)
-		0x05 = 8-bit R, 8-bit G, 8-bit B, 8-bit gap (32 bpp)
-	4 bytes current frame start (measured in bytes, from start of video memory)
+		0x05 = 8-bit gap, 8-bit R, 8-bit G, 8-bit B (32 bpp) - default
+	2 bytes screen width
+		default = 0x0500 (1280 px)
+	2 bytes screen height
+		default = 0x0400 (1024 px)
+	2 bytes unused
+	8 bytes current frame start (measured in bytes, from start of video memory)
 		default = 0x00100000 (1 MB)
 
-ATHARTI has two memory systems, one exposed here and another called the image buffer. The image buffer is updated whenever the video data structure offset field is written to, even if the value does not change. This serves to prevent screen tearing. The provision of an exact byte offset assists in implementation of smooth full-screen scrolling.
+ATHARTI has two memory systems, one exposed here and another called the image buffer. The image buffer is updated whenever the device control interrupt is sent (default = 0xd1). This serves to prevent screen tearing. In the emulator this is implemented as an SDL Texture. The provision of an exact byte offset assists in implementation of smooth full-screen scrolling.
 
 
 10.2. The Loec Pointer Device
@@ -2085,10 +2111,10 @@ DRAKIRA has the following DMT signature:
 
 	c08f 0006 075a 20ec
 	0000 0000 0ba5 0100
-	0000 0000 0000 0400
+	0000 0000 0008 0000
 	0000 0000 0000 0000
 
-The base model maps 1024 memory pages (1 MB), where the top half (pages 0 to 1ff) consists of input to DRAKIRA, and the bottom half (pages 200 to 3ff) consists of output from the DRAKIRA chip. Data is sent by writing to the Drakira input buffer. Commands are sent by pointing to a compiled binary in main system memory and sending a control interrupt (standardly, 0xed). Results are obtained by trapping the event interrupt (standardly, 0xec) and monitoring the Drakira output buffer.
+The base model maps 512 kilowords (1 MB), where the first half (addresses +0x00000 through +0x3ffff) consists of input to DRAKIRA, and the second half (addresses +400000 to +7ffff) consists of output from the DRAKIRA chip. Data is sent by writing to the Drakira input buffer. Commands are sent by pointing to a compiled binary in main system memory and sending a control interrupt (standardly, 0xed). Results are obtained by trapping the event interrupt (standardly, 0xec) and monitoring the Drakira output buffer.
 
 DRAKIRA supports multi-programming (task-switching) of up to 64 jobs by assigning the current I/O buffers and configuration options to a job identifier called a PID. The kernel can instruct Drakira to switch to a new task with the control interrupt h=0x0c g=<PID>.
 
@@ -2379,14 +2405,14 @@ Serial devices include:
 10.10. ROM
 ----------
 
-The system firmware has the device signature:
+The system firmware is always device #2. It has the device signature:
 
 	c800 0002 0102 0110
 	0000 0000 0ba5 000a
-	0000 0000 0000 00ee
-	0000 0000 0000 0010
+	0000 0000 0001 e000
+	0000 0000 0000 0000
 
-When the system initializes, the DMU automatically maps the ROM's 240 pages into the 0x03000-0x1ffff range. The underlying RAM cannot be accessed while the ROM is mapped here. The OS may later unload it if desired, but the code is not relocatable as it expects to be at a fixed address.
+When the system initializes, the DMU automatically maps the ROM's 120 kilowords into the 0x020000000000-0x02000001dfff range. All ROM images should be compiled with the 0x020000000000 base address.
 
 The firmware generates and accepts a variety of interrupts in the range 0x10 to 0x1f. These are software interrupts handled by the code in the firmware image. See 9. RADIX FIRMWARE ROM for more information.
 
@@ -2400,14 +2426,14 @@ The CHASM CPU itself is a DMU-mapped device. It appears in the DMT as:
 
 	f3bc 0001 0001 01c0
 	0000 0000 0ba5 01f4
-	0000 0000 0000 0001
+	0000 0000 0000 0060
 	0000 0000 0000 0000
 
-It maps 1 page, which contains 128 bytes describing the entire current register state for that CPU.
+It maps 60 words describing the entire current register state for the CPU.
 
 This is valuable when working with a multi-processor system, as interrupts can be used to send commands from one CPU to another.
 
-The first CPU is always mapped to system device 0, and is considered the primary processor of the system. This means it can receive interrupts (c0) from the other CPUs, which are termed secondary processors.
+The first CPU is always mapped to system device 1, and is considered the primary processor of the system. This means it can receive interrupts (c0) from the other CPUs, which are termed secondary processors.
 
 A secondary processor may generate a c0 interrupt on the primary processor if:
 
