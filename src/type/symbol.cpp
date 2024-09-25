@@ -853,7 +853,7 @@ int symbolize(link<token>* t) {
                         ins->child->output[3] = ((ins->child->literal->literal_numeric_value) >>  0) & 0xff;
                     }
                     // ins->child->output[2 + TRAILER_SIZE] = 0;
-                    printf("%4x\t%s\t%04x\n", ln, o->text, opcode_emission);
+                    printf("line %04u: \t%s -> %04x\n", ln, o->text, opcode_emission);
                     address += 1 + TRAILER_SIZE;
 
                     ignore_rest_of_line = 1;
