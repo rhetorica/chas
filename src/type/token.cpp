@@ -240,6 +240,8 @@ link<token>* tokenize(char* raw_text) {
 				last_token = add_token(last_token, raw_text, ws, we, TK_LIT_STRING, n++, ln);
 				mode = 0;
 				ws = we = -1;
+			} else if(c == '\r' || c == '\n') {
+				++ln;
 			}
 		} else if(mode == 3) {
 			if(c == '\\' && d == '\\') {
@@ -251,11 +253,14 @@ link<token>* tokenize(char* raw_text) {
 				last_token = add_token(last_token, raw_text, ws, we, TK_LIT_STRING, n++, ln);
 				mode = 0;
 				ws = we = -1;
+			} else if(c == '\r' || c == '\n') {
+				++ln;
 			}
 		} else if(mode == 2) {
 			if(c == '\r' || c == '\n') {
 				mode = 0;
 				ws = we = -1;
+				++ln;
 			}
 		}
 
@@ -268,6 +273,20 @@ link<token>* tokenize(char* raw_text) {
 			++ln;
 		} */
 	}
+
+	// end last line:
+	if(mode == 0) {
+		if(we - ws >= 0) {
+			last_token = add_token(last_token, raw_text, ws, we, TK_NAME, n++, ln);
+		}
+	} else if(mode == 1) { // single-quote string
+		last_token = add_token(last_token, raw_text, ws, we, TK_LIT_STRING, n++, ln);
+	} else if(mode == 2) { // comment; do nothing
+		
+	} else if(mode == 3) { // double-quote string
+		last_token = add_token(last_token, raw_text, ws, we, TK_LIT_STRING, n++, ln);
+	}
+
 	link<token>* t = first_token->next;
 	fpos_t j = 0;
 	ln = 0;
