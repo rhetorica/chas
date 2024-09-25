@@ -145,12 +145,12 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "iret",    0xF401, O_ZERO);
     last_opcode = add_opcode(last_opcode, n++, "lmmt",    0xF410, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "ret",     0xF400, O_ZERO);
-    last_opcode = add_opcode(last_opcode, n++, "call",    0xF800, O_MONO_OR_LIT | O_LIT_REF);
+    last_opcode = add_opcode(last_opcode, n++, "call",    0xF800, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "cout",    0x2800, O_OPT_IMM_8);
     last_opcode = add_opcode(last_opcode, n++, "creg",    0x2900, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "cregx",   0x2910, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "crega",   0x2920, O_MONO);
-    last_opcode = add_opcode(last_opcode, n++, "cregf",   0x2920, O_MONO);
+    last_opcode = add_opcode(last_opcode, n++, "cregf",   0x2930, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "cin",     0x2980, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "cinx",    0x2990, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "cina",    0x29A0, O_MONO);
