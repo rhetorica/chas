@@ -1,8 +1,8 @@
 #ifndef MAIN_HPP
     #define MAIN_HPP
-    #define VERSION "0.0.1"
+    #define VERSION "0.0.2"
     #define NOWHERE (size_t)(-1)
-    #define START_ADDRESS 0xf000000000000000
+    #define START_ADDRESS 0x0000020000000000
 
     #include <stdio.h>
     #include <string.h>
