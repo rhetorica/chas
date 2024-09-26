@@ -32,32 +32,57 @@ char* get_file_contents(char* filename) {
     }
 }
 
-int process(char* filename, char* output_filename) {
+link<token>* all_tokens = NULL;
+link<token>* last_token = NULL;
+
+int process(char* filename) {
 	char* buffer;
 	link<token>* tokens;
 	buffer = get_file_contents(filename);
     if(buffer != NULL) {
 		tokens = tokenize(buffer);
+		if(tokens != NULL) {
+			if(all_tokens == NULL)
+				all_tokens = tokens;
+			else {
+				last_token->next = tokens;
+				printf(" -- ligated token lists\n");
+			}
+
+			link<token>* tk = tokens;
+			while(tk->next != NULL) {
+				tk->child->filename = filename;
+				tk = tk->next;
+			}
+			tk->child->filename = filename;
+			last_token = tk;
+			return 0;
+		} else {
+			fprintf(stderr, " -- failed to tokenize file %s\n", filename);
+			return 1;
+		}
 	} else {
 		fprintf(stderr, " -- failed to load file %s\n", filename);
 		return 1;
 	}
+}
 
-	if(tokens != NULL) {
-		int failures = collect_labels(tokens);
+int output(char* output_filename) {
+	if(all_tokens != NULL) {
+		int failures = collect_labels(all_tokens);
 		if(failures)
 			return failures;
 	} else {
-		fprintf(stderr, " -- failed to collect labels in file %s\n", filename);
+		fprintf(stderr, " -- failed to collect labels\n");
 		return 1;
 	}
 
 	if(labels != NULL) {
-		int failures = symbolize(tokens);
+		int failures = symbolize(all_tokens);
 		if(failures)
 			return failures;
 	} else {
-		fprintf(stderr, " -- failed to tokenize file %s\n", filename);
+		fprintf(stderr, " -- failed to decorate\n");
 		return 1;
 	}
 
@@ -65,7 +90,7 @@ int process(char* filename, char* output_filename) {
 	if(patch_failures)
 		return patch_failures;
 	
-	fprintf(stderr, " -- symbolize() succeeded; writing to %s now?\n", output_filename);
+	fprintf(stderr, " -- code generation succeeded; writing output to %s\n", output_filename);
 
 	int export_failures = write_emissions(output_filename);
 
@@ -297,7 +322,7 @@ int main(int argc, char* argv[]) {
 				strcat(output_filename, ".o");
 				// just the worst string processing
 			}
-			failures += process(argv[argi], output_filename);
+			failures += process(argv[argi]);
 		}
 		delete chars;
 		if(failures) {
@@ -306,5 +331,7 @@ int main(int argc, char* argv[]) {
 		}
 		++argi;
 	}
+	if(!failures)
+		failures += output(output_filename);
 	return failures;
 }

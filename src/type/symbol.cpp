@@ -2,7 +2,6 @@
 #include "symbol.h"
 #include "opcode.h"
 
-
 link<label>* labels = NULL;
 
 struct patch_address {
@@ -19,8 +18,10 @@ struct emission {
 
 link<patch_address>* unpatched = NULL;
 link<emission>* emissions = NULL;
+link<emission>* last_emission = NULL;
 
 int write_emissions(char* filename) {
+    printf(" -- writing output...\n");
     FILE* f = fopen(filename, "wb");
     if(f == NULL) {
         fprintf(stderr, " -- could not open output file: %s\n", filename);
@@ -47,11 +48,12 @@ int write_emissions(char* filename) {
 }
 
 int apply_patches() {
+    printf(" -- applying patches...\n");
     link<patch_address>* p = unpatched;
     while(p != NULL) {
         unsigned long long address = p->child->label->address;
         if(p->child->instruction->output_size != 10) {
-            fprintf(stderr, " -- internal error: instruction on line %u did not allocate space for patching address literal\n", p->child->instruction->line);
+            fprintf(stderr, " -- internal error: instruction on line %d of %s did not allocate space for patching address literal\n", p->child->instruction->line, p->child->instruction->filename);
             return 1;
         } else {
             p->child->instruction->output[2] = (address >> 56) & 0xff;
@@ -62,7 +64,7 @@ int apply_patches() {
             p->child->instruction->output[7] = (address >> 16) & 0xff;
             p->child->instruction->output[8] = (address >>  8) & 0xff;
             p->child->instruction->output[9] = (address >>  0) & 0xff;
-            printf(" -- patched address to '%s' (0x%llx) on line %u\n", p->child->label->text, p->child->label->address, p->child->instruction->line);
+            printf(" -- patched address to '%s' (0x%llx) on line %d of %s\n", p->child->label->text, p->child->label->address, p->child->instruction->line, p->child->instruction->filename);
         }
         p = p->next;
     }
@@ -77,6 +79,7 @@ int apply_patches() {
 }
 
 int collect_labels(link<token>* t) {
+    printf(" -- collecting labels...\n");
     link<label>* last_label = labels = new link<label>;
     labels->child = new label;
     labels->child->text = "start";
@@ -93,7 +96,7 @@ int collect_labels(link<token>* t) {
             link<label>* s = labels;
             while(s != NULL) {
                 if(strcmp(s->child->text, t->child->text) == 0) {
-                    fprintf(stderr, " -- label '%s' on line %u redefined on line %u\n", s->child->text, s->child->token->line, t->child->line);
+                    fprintf(stderr, " -- label '%s' on line %d of %s redefined on line %d of %s\n", s->child->text, s->child->token->line, s->child->token->filename, t->child->line, t->child->filename);
                     return 1;
                 }
                 s = s->next;
@@ -114,12 +117,15 @@ int collect_labels(link<token>* t) {
 }
 
 int symbolize(link<token>* t) {
-    link<emission>* last_emission = NULL;
+    printf(" -- compiling...\n");
+
     fpos_t ln = 0;
     fpos_t address = 0;
+    char* filename;
     int ignore_rest_of_line = 0;
-    t = t->next;
     while(t != NULL) {
+        while(t->child->line == 0)
+            t = t->next;
         while(t->child->type == TK_LABEL) {
             t->child->address = address + base_address;
             t->child->label->address = t->child->address;
@@ -127,10 +133,44 @@ int symbolize(link<token>* t) {
             t = t->next;
         }
         fpos_t new_ln = t->child->line;
-        if(new_ln != ln) {
+        if(new_ln != ln || filename != t->child->filename) {
+            printf("processing line %d\n", new_ln);
             ignore_rest_of_line = 0;
             ln = new_ln;
-            if(t->child->type == TK_NAME) {
+            filename = t->child->filename;
+            printf("line %d of %s: %s\n", ln, filename, t->child->text);
+            if(strcmp(t->child->text, "embed") == 0) {
+                if(t->next->child->type == TK_LIT_STRING) {
+                    char* embed_filename = t->next->child->text;
+                    link<emission>* new_emission = new link<emission>;
+                    new_emission->child = new emission;
+                    new_emission->child->origin = t->child;
+                    new_emission->child->text = get_file_contents(embed_filename);
+                    new_emission->child->size = strlen(new_emission->child->text);
+                    if(new_emission->child->size % 2)
+                        new_emission->child->size += 1; // add the string zero terminator
+                    if(new_emission->child->size == 0) {
+                        fprintf(stderr, " -- could not embed file %s into %s at line %d: no content\n", embed_filename, filename, ln);
+                        return 1;
+                    } else {
+                        printf("embedded %s (%d bytes) at address 0x%016llx\n", filename, new_emission->child->size, address);
+                        if(last_emission != NULL)
+                            last_emission->next = new_emission;
+                        else
+                            emissions = new_emission;
+                        
+                        new_emission->next = NULL;
+                        last_emission = new_emission;
+
+                        t = t->next;
+                        ignore_rest_of_line = 1;
+                    }
+                    address += new_emission->child->size;
+                } else {
+                    fprintf(stderr, " -- embed with no filename on line %d of %s\n", ln, filename);
+                    return 1;
+                }
+            } else if(t->child->type == TK_NAME) {
                 opcode* o = find_opcode(t->child->text);
                 if(o != NULL) {
                     link<token>* ins = t;
@@ -141,11 +181,11 @@ int symbolize(link<token>* t) {
 
                     if(ins->child->op->format & O_MONO) {
                         link<token>* r0 = t->next;
-                        if(r0->child->line != ln) {
-                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                        if(r0->child->line != ln || r0->child->filename != filename) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(r0->child->type != TK_REGNAME) {
-                            fprintf(stderr, " -- expected register name but got '%s' on line %i\n", r0->child->text, ln);
+                            fprintf(stderr, " -- expected register name but got '%s' on line %d of %s\n", r0->child->text, ln, filename);
                             return 1;
                         } else {
                             printf("got first register argument %s (r%02x)\n", r0->child->text, r0->child->reg->number);
@@ -157,11 +197,11 @@ int symbolize(link<token>* t) {
 
                     if(ins->child->op->format & O_DUO_ONLY) {
                         link<token>* r0 = t->next;
-                        if(r0->child->line != ln) {
-                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                        if(r0->child->line != ln || r0->child->filename != filename) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(r0->child->type != TK_REGNAME) {
-                            fprintf(stderr, " -- expected register name but got '%s' on line %i\n", r0->child->text, ln);
+                            fprintf(stderr, " -- expected register name but got '%s' on line %d of %s\n", r0->child->text, ln, filename);
                             return 1;
                         } else {
                             printf("got duo-only register argument %s (r%02x)\n", r0->child->text, r0->child->reg->number);
@@ -173,8 +213,8 @@ int symbolize(link<token>* t) {
 
                     if(ins->child->op->format & O_MONO_OR_LIT) {
                         link<token>* r0 = t->next;
-                        if(r0->child->line != ln) {
-                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                        if(r0->child->line != ln || r0->child->filename != filename) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(r0->child->type == TK_REGNAME) {
                             printf("got first register argument %s (r%02x)\n", r0->child->text, r0->child->reg->number);
@@ -190,7 +230,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered label usage on line %i but opcode does not expect reference literal\n", r0->child->text, ln);
+                                fprintf(stderr, " -- encountered label usage on line %d of %s but opcode does not expect reference literal\n", r0->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r0->child->type == TK_LIT_QWORD) {
@@ -202,7 +242,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered QWORD literal on line %i but opcode cannot accept 64-bit literal\n", r0->child->text, ln);
+                                fprintf(stderr, " -- encountered QWORD literal on line %d of %s but opcode cannot accept 64-bit literal\n", r0->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r0->child->type == TK_LIT_DWORD) {
@@ -221,7 +261,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered DWORD literal on line %i but opcode cannot accept 32-bit literal\n", r0->child->text, ln);
+                                fprintf(stderr, " -- encountered DWORD literal on line %d of %s but opcode cannot accept 32-bit literal\n", r0->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r0->child->type == TK_LIT_WORD) {
@@ -247,7 +287,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered WORD literal on line %i but opcode cannot accept 16-bit literal\n", r0->child->text, ln);
+                                fprintf(stderr, " -- encountered WORD literal on line %d of %s but opcode cannot accept 16-bit literal\n", r0->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r0->child->type == TK_LIT_BYTE) {
@@ -273,7 +313,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered BYTE literal on line %i but opcode cannot accept 8-bit literal\n", r0->child->text, ln);
+                                fprintf(stderr, " -- encountered BYTE literal on line %d of %s but opcode cannot accept 8-bit literal\n", r0->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r0->child->type == TK_NAME) {
@@ -281,7 +321,7 @@ int symbolize(link<token>* t) {
                             link<label>* mylabel = NULL;
                             while(s != NULL) {
                                 if(strcmp(s->child->text, r0->child->text) == 0) {
-                                    fprintf(stderr, " -- label '%s' with address %016llx on line %u used on line %u\n", s->child->text, s->child->address, s->child->token->line, ln);
+                                    fprintf(stderr, " -- label '%s' with address %016llx on line %d of %s used on line %d of %s\n", s->child->text, s->child->address, s->child->token->line, s->child->token->filename, ln, filename);
                                     mylabel = s;
                                     break;
                                 }
@@ -289,7 +329,7 @@ int symbolize(link<token>* t) {
                             }
 
                             if(mylabel == NULL) {
-                                fprintf(stderr, " -- undefined name '%s' on line %i\n", r0->child->text, ln);
+                                fprintf(stderr, " -- undefined name '%s' on line %d of %s\n", r0->child->text, ln, filename);
                                 return 1;
                             } else {
                                 ins->child->literal = r0->child;
@@ -308,21 +348,21 @@ int symbolize(link<token>* t) {
                                 opcode_emission = (opcode_emission & 0xfff0) | 0xf;
                             }
                         } else {
-                            fprintf(stderr, " -- expected register name, label usage, or numeric literal but got '%s' on line %i\n", r0->child->text, ln);
+                            fprintf(stderr, " -- expected register name, label usage, or numeric literal but got '%s' on line %d of %s\n", r0->child->text, ln, filename);
                             return 1;
                         }
                     } // O_MONO_OR_LIT
 
                     if(ins->child->op->format & O_FLAG) {
                         link<token>* bitflag = t->next;
-                        if(bitflag->child->line != ln) {
-                            fprintf(stderr, " -- expected literal byte but got EOL on line %i\n", ln);
+                        if(bitflag->child->line != ln || bitflag->child->filename != filename) {
+                            fprintf(stderr, " -- expected literal byte but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(bitflag->child->type != TK_LIT_BYTE) {
-                            fprintf(stderr, " -- expected literal byte but got '%s' on line %i\n", bitflag->child->text, ln);
+                            fprintf(stderr, " -- expected literal byte but got '%s' on line %d of %s\n", bitflag->child->text, ln, filename);
                             return 1;
                         } else if(bitflag->child->literal_numeric_value > 63) {
-                            fprintf(stderr, " -- index out of range: bit '%s' (%i) must be in range 0-63 on line %i\n", bitflag->child->text, bitflag->child->literal_numeric_value, ln);
+                            fprintf(stderr, " -- index out of range: bit '%s' (%i) must be in range 0-63 on line %d of %s\n", bitflag->child->text, bitflag->child->literal_numeric_value, ln, filename);
                             return 1;
                         } else {
                             printf("got bit index (literal byte) argument %s %llu\n", bitflag->child->text, bitflag->child->literal_numeric_value);
@@ -333,11 +373,11 @@ int symbolize(link<token>* t) {
 
                     if(ins->child->op->format & O_DUO) {
                         link<token>* r1 = t->next;
-                        if(r1->child->line != ln) {
-                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                        if(r1->child->line != ln || r1->child->filename != filename) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(r1->child->type != TK_REGNAME) {
-                            fprintf(stderr, " -- expected register name but got '%s' on line %i\n", r1->child->text, ln);
+                            fprintf(stderr, " -- expected register name but got '%s' on line %d of %s\n", r1->child->text, ln, filename);
                             return 1;
                         } else {
                             printf("got second register argument %s (r%02x)\n", r1->child->text, r1->child->reg->number);
@@ -349,15 +389,15 @@ int symbolize(link<token>* t) {
                     
                     if(ins->child->op->format & O_OPT_IMM_8) {
                         link<token>* byte = t->next;
-                        if(byte->child->line != ln) {
-                            fprintf(stderr, " -- expected literal byte but got EOL on line %i\n", ln);
+                        if(byte->child->line != ln || byte->child->filename != filename) {
+                            fprintf(stderr, " -- expected literal byte but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(byte->child->type == TK_LIT_STRING && strlen(byte->child->text) == 1) {
                             printf("got single character argument %s %llu\n", byte->child->text, byte->child->text[0]);
                             opcode_emission = (opcode_emission & 0xff00) | (byte->child->text[0]);
                             t = t->next;
                         } else if(byte->child->type != TK_LIT_BYTE) {
-                            fprintf(stderr, " -- expected literal byte but got '%s' on line %i\n", byte->child->text, ln);
+                            fprintf(stderr, " -- expected literal byte but got '%s' on line %d of %s\n", byte->child->text, ln, filename);
                             return 1;
                         } else {
                             printf("got literal byte argument %s %llu\n", byte->child->text, byte->child->literal_numeric_value);
@@ -376,7 +416,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered label usage on line %i but opcode does not expect reference literal\n", r1->child->text, ln);
+                                fprintf(stderr, " -- encountered label usage on line %d of %s but opcode does not expect reference literal\n", r1->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r1->child->type == TK_LIT_QWORD) {
@@ -387,7 +427,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered QWORD literal on line %i but opcode cannot accept 64-bit literal\n", r1->child->text, ln);
+                                fprintf(stderr, " -- encountered QWORD literal on line %d of %s but opcode cannot accept 64-bit literal\n", r1->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r1->child->type == TK_LIT_DWORD) {
@@ -404,7 +444,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered DWORD literal on line %i but opcode cannot accept 32-bit literal\n", r1->child->text, ln);
+                                fprintf(stderr, " -- encountered DWORD literal on line %d of %s but opcode cannot accept 32-bit literal\n", r1->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r1->child->type == TK_LIT_WORD) {
@@ -427,7 +467,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered WORD literal on line %i but opcode cannot accept 16-bit literal\n", r1->child->text, ln);
+                                fprintf(stderr, " -- encountered WORD literal on line %d of %s but opcode cannot accept 16-bit literal\n", r1->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r1->child->type == TK_LIT_BYTE) {
@@ -455,7 +495,7 @@ int symbolize(link<token>* t) {
                             link<label>* mylabel = NULL;
                             while(s != NULL) {
                                 if(strcmp(s->child->text, r1->child->text) == 0) {
-                                    fprintf(stderr, " -- label '%s' with address %016llx on line %u used on line %u\n", s->child->text, s->child->address, s->child->token->line, ln);
+                                    fprintf(stderr, " -- label '%s' with address %016llx on line %d of %s used on line %d of %s\n", s->child->text, s->child->address, s->child->token->line, s->child->token->filename, ln, filename);
                                     mylabel = s;
                                     break;
                                 }
@@ -463,7 +503,7 @@ int symbolize(link<token>* t) {
                             }
 
                             if(mylabel == NULL) {
-                                fprintf(stderr, " -- undefined name '%s' on line %i\n", r1->child->text, ln);
+                                fprintf(stderr, " -- undefined name '%s' on line %d of %s\n", r1->child->text, ln, filename);
                                 return 1;
                             } else {
                                 ins->child->literal = r1->child;
@@ -484,12 +524,12 @@ int symbolize(link<token>* t) {
                     } // O_MONO_AND_LIT
 
                     if(ins->child->op->format & O_UNFINISHED) {
-                        fprintf(stderr, "Unimplemented: unfinished instruction %s on line %u\n", ins->child->text, ln);
+                        fprintf(stderr, "Unimplemented: unfinished instruction %s on line %d of %s\n", ins->child->text, ln, filename);
                         return 1;
                     } // O_UNFINISHED
 
                     if(ins->child->op->format & O_LIT_ONLY) {
-                        fprintf(stderr, "Unimplemented: lit-only instruction %s on line %u\n", ins->child->text, ln);
+                        fprintf(stderr, "Unimplemented: lit-only instruction %s on line %d of %s\n", ins->child->text, ln, filename);
                         return 1;
                     } // O_LIT_ONLY
 
@@ -497,14 +537,14 @@ int symbolize(link<token>* t) {
                         link<token>* r0 = t->next;
                         link<token>* r1 = r0->next;
 
-                        if(r0->child->line != ln) {
-                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                        if(r0->child->line != ln || r0->child->filename != filename) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(r0->child->type != TK_REGNAME) {
-                            fprintf(stderr, " -- expected register name but got '%s' on line %i\n", r0->child->text, ln);
+                            fprintf(stderr, " -- expected register name but got '%s' on line %d of %s\n", r0->child->text, ln, filename);
                             return 1;
                         } else if(r0->child->reg->number > 7) {
-                            fprintf(stderr, " -- arithmetic operation '%s' on line %i can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, r0->child->reg->name);
+                            fprintf(stderr, " -- arithmetic operation '%s' on line %d of %s can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, filename, r0->child->reg->name);
                             return 1;
                         } else {
                             printf("got first register argument %s (r%02x)\n", r0->child->text, r0->child->reg->number);
@@ -513,14 +553,14 @@ int symbolize(link<token>* t) {
                             t = t->next;
                         }
 
-                        if(r1->child->line != ln) {
-                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                        if(r1->child->line != ln || r1->child->filename != filename) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(r1->child->type != TK_REGNAME) {
-                            fprintf(stderr, " -- expected register name but got '%s' on line %i (did you mean the .i version?)\n", r1->child->text, ln);
+                            fprintf(stderr, " -- expected register name but got '%s' on line %d of %s (did you mean the .i version?)\n", r1->child->text, ln, filename);
                             return 1;
                         } else if(r1->child->reg->number > 7) {
-                            fprintf(stderr, " -- arithmetic operation '%s' on line %i can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, r1->child->reg->name);
+                            fprintf(stderr, " -- arithmetic operation '%s' on line %d of %s can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, filename, r1->child->reg->name);
                             return 1;
                         } else {
                             printf("got second register argument %s (r%02x)\n", r1->child->text, r1->child->reg->number);
@@ -532,14 +572,14 @@ int symbolize(link<token>* t) {
 
                     if(ins->child->op->format & O_ARITHMETIC_TRIO) {
                         link<token>* r2 = t->next;
-                        if(r2->child->line != ln) {
-                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                        if(r2->child->line != ln || r2->child->filename != filename) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(r2->child->type != TK_REGNAME) {
-                            fprintf(stderr, " -- expected register name but got '%s' on line %i\n", r2->child->text, ln);
+                            fprintf(stderr, " -- expected register name but got '%s' on line %d of %s\n", r2->child->text, ln, filename);
                             return 1;
                         } else if(r2->child->reg->number > 7) {
-                            fprintf(stderr, " -- arithmetic operation '%s' on line %i can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, r2->child->reg->name);
+                            fprintf(stderr, " -- arithmetic operation '%s' on line %d of %s can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, filename, r2->child->reg->name);
                             return 1;
                         } else {
                             printf("got third register argument %s (r%02x)\n", r2->child->text, r2->child->reg->number);
@@ -552,14 +592,14 @@ int symbolize(link<token>* t) {
                     if(ins->child->op->format & O_ARITHMETIC_LIT) {
                         link<token>* r0 = t->next;
 
-                        if(r0->child->line != ln) {
-                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                        if(r0->child->line != ln || r0->child->filename != filename) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(r0->child->type != TK_REGNAME) {
-                            fprintf(stderr, " -- expected register name but got '%s' on line %i\n", r0->child->text, ln);
+                            fprintf(stderr, " -- expected register name but got '%s' on line %d of %s\n", r0->child->text, ln, filename);
                             return 1;
                         } else if(r0->child->reg->number > 7) {
-                            fprintf(stderr, " -- arithmetic operation '%s' on line %i can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, r0->child->reg->name);
+                            fprintf(stderr, " -- arithmetic operation '%s' on line %d of %s can only use data registers (a-h); you provided a system register (%s)\n", ins->child->text, ln, filename, r0->child->reg->name);
                             return 1;
                         } else {
                             printf("got first register argument %s (r%02x)\n", r0->child->text, r0->child->reg->number);
@@ -577,7 +617,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered label usage on line %i but opcode does not expect reference literal\n", r1->child->text, ln);
+                                fprintf(stderr, " -- encountered label usage on line %d of %s but opcode does not expect reference literal\n", r1->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r1->child->type == TK_LIT_QWORD) {
@@ -588,7 +628,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered QWORD literal on line %i but opcode cannot accept 64-bit literal\n", r1->child->text, ln);
+                                fprintf(stderr, " -- encountered QWORD literal on line %d of %s but opcode cannot accept 64-bit literal\n", r1->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r1->child->type == TK_LIT_DWORD) {
@@ -605,7 +645,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered DWORD literal on line %i but opcode cannot accept 32-bit literal\n", r1->child->text, ln);
+                                fprintf(stderr, " -- encountered DWORD literal on line %d of %s but opcode cannot accept 32-bit literal\n", r1->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r1->child->type == TK_LIT_WORD) {
@@ -628,7 +668,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered WORD literal on line %i but opcode cannot accept 16-bit literal\n", r1->child->text, ln);
+                                fprintf(stderr, " -- encountered WORD literal on line %d of %s but opcode cannot accept 16-bit literal\n", r1->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r1->child->type == TK_LIT_BYTE) {
@@ -656,7 +696,7 @@ int symbolize(link<token>* t) {
                             link<label>* mylabel = NULL;
                             while(s != NULL) {
                                 if(strcmp(s->child->text, r1->child->text) == 0) {
-                                    fprintf(stderr, " -- label '%s' with address %016llx on line %u used on line %u\n", s->child->text, s->child->address, s->child->token->line, ln);
+                                    fprintf(stderr, " -- label '%s' with address %016llx on line %d of %s used on line %d of %s\n", s->child->text, s->child->address, s->child->token->line, s->child->token->filename, ln, filename);
                                     mylabel = s;
                                     break;
                                 }
@@ -664,7 +704,7 @@ int symbolize(link<token>* t) {
                             }
 
                             if(mylabel == NULL) {
-                                fprintf(stderr, " -- undefined name '%s' on line %i\n", r1->child->text, ln);
+                                fprintf(stderr, " -- undefined name '%s' on line %d of %s\n", r1->child->text, ln, filename);
                                 return 1;
                             } else {
                                 ins->child->literal = r1->child;
@@ -686,8 +726,8 @@ int symbolize(link<token>* t) {
                     
                     if(ins->child->op->format & O_TRIO) {
                         link<token>* r2 = t->next;
-                        if(r2->child->line != ln) {
-                            fprintf(stderr, " -- expected register name but got EOL on line %i\n", ln);
+                        if(r2->child->line != ln || r2->child->filename != filename) {
+                            fprintf(stderr, " -- expected register name but got EOL on line %d of %s\n", ln, filename);
                             return 1;
                         } else if(r2->child->type == TK_REGNAME) {
                             printf("got first register argument %s (r%02x)\n", r2->child->text, r2->child->reg->number);
@@ -703,7 +743,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered label usage on line %i but opcode does not expect reference literal\n", r2->child->text, ln);
+                                fprintf(stderr, " -- encountered label usage on line %d of %s but opcode does not expect reference literal\n", r2->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r2->child->type == TK_LIT_QWORD) {
@@ -715,7 +755,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered QWORD literal on line %i but opcode cannot accept 64-bit literal\n", r2->child->text, ln);
+                                fprintf(stderr, " -- encountered QWORD literal on line %d of %s but opcode cannot accept 64-bit literal\n", r2->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r2->child->type == TK_LIT_DWORD) {
@@ -734,7 +774,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered DWORD literal on line %i but opcode cannot accept 32-bit literal\n", r2->child->text, ln);
+                                fprintf(stderr, " -- encountered DWORD literal on line %d of %s but opcode cannot accept 32-bit literal\n", r2->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r2->child->type == TK_LIT_WORD) {
@@ -760,7 +800,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered WORD literal on line %i but opcode cannot accept 16-bit literal\n", r2->child->text, ln);
+                                fprintf(stderr, " -- encountered WORD literal on line %d of %s but opcode cannot accept 16-bit literal\n", r2->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r2->child->type == TK_LIT_BYTE) {
@@ -786,7 +826,7 @@ int symbolize(link<token>* t) {
 
                                 t = t->next;
                             } else {
-                                fprintf(stderr, " -- encountered BYTE literal on line %i but opcode cannot accept 8-bit literal\n", r2->child->text, ln);
+                                fprintf(stderr, " -- encountered BYTE literal on line %d of %s but opcode cannot accept 8-bit literal\n", r2->child->text, ln, filename);
                                 return 1;
                             }
                         } else if(r2->child->type == TK_NAME) {
@@ -794,7 +834,7 @@ int symbolize(link<token>* t) {
                             link<label>* mylabel = NULL;
                             while(s != NULL) {
                                 if(strcmp(s->child->text, r2->child->text) == 0) {
-                                    fprintf(stderr, " -- label '%s' with address %016llx on line %u used on line %u\n", s->child->text, s->child->address, s->child->token->line, ln);
+                                    fprintf(stderr, " -- label '%s' with address %016llx on line %d of %s used on line %d of %s\n", s->child->text, s->child->address, s->child->token->line, s->child->token->filename, ln, filename);
                                     mylabel = s;
                                     break;
                                 }
@@ -802,7 +842,7 @@ int symbolize(link<token>* t) {
                             }
 
                             if(mylabel == NULL) {
-                                fprintf(stderr, " -- undefined name '%s' on line %i\n", r2->child->text, ln);
+                                fprintf(stderr, " -- undefined name '%s' on line %d of %s\n", r2->child->text, ln, filename);
                                 return 1;
                             } else {
                                 ins->child->literal = r2->child;
@@ -820,7 +860,7 @@ int symbolize(link<token>* t) {
                                 TRAILER_SIZE = 4;
                             }
                         } else {
-                            fprintf(stderr, " -- expected register name, label usage, or numeric literal but got '%s' on line %i\n", r2->child->text, ln);
+                            fprintf(stderr, " -- expected register name, label usage, or numeric literal but got '%s' on line %d of %s\n", r2->child->text, ln, filename);
                             return 1;
                         }
                     } // O_TRIO
@@ -872,8 +912,8 @@ int symbolize(link<token>* t) {
                     last_emission = new_emission;
                 } else if(strcmp(t->child->text, "repeat") == 0) {
                     fpos_t count = t->next->child->literal_numeric_value;
-                    if(count == 0 || (t->next->child->line != ln)) {
-                        fprintf(stderr, "Warning: missing, invalid, or zero argument to 'repeat' on line %i\n", ln);
+                    if(count == 0 || (t->next->child->line != ln || t->next->child->filename != filename)) {
+                        fprintf(stderr, "Warning: missing, invalid, or zero argument to 'repeat' on line %d of %s\n", ln, filename);
                     } else {
                         last_emission->child->repeats = count * last_emission->child->size;
                         printf("Adding %i byte(s) for 'repeat' on line %i\n", last_emission->child->repeats, ln);
@@ -881,15 +921,15 @@ int symbolize(link<token>* t) {
                     }
                 } else if(strcmp(t->child->text, "pad") == 0) {
                     fpos_t count = t->next->child->literal_numeric_value;
-                    if(count == 0 || (t->next->child->line != ln)) {
-                        fprintf(stderr, "Warning: missing, invalid, or zero argument to 'pad' on line %i\n", ln);
+                    if(count == 0 || (t->next->child->line != ln || t->next->child->filename != filename)) {
+                        fprintf(stderr, "Warning: missing, invalid, or zero argument to 'pad' on line %d of %s\n", ln, filename);
                     } else {
                         last_emission->child->repeats = (count - address) * 2;
-                        printf("Adding %i byte(s) for 'pad' on line %i\n", last_emission->child->repeats, ln);
+                        printf("Adding %i byte(s) for 'pad' on line %d of %s\n", last_emission->child->repeats, ln, filename);
                         address += (last_emission->child->repeats) / 2;
                     }
                 } else {
-                    fprintf(stderr, " -- unknown opcode %s on line %i\n", t->child->text, ln);
+                    fprintf(stderr, " -- unknown instruction %s on line %d of %s\n", t->child->text, ln, filename);
                     return 1;
                 }
             } else if(t->child->type == TK_LIT_STRING
@@ -957,7 +997,7 @@ int symbolize(link<token>* t) {
                     printf(" -- encoding 8-bit numeric literal '%s' as word\n", t->child->text);
                 }
             } else {
-                printf("[unimplemented] not sure what to do with '%s' on line %i\n", t->child->text, ln);
+                printf("[unimplemented?] not sure what to do with '%s' on line %d of %s\n", t->child->text, ln, filename);
                 return 1;
             }
         }

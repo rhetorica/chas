@@ -36,6 +36,7 @@ struct token {
     label* label;
     reg* reg;
     unsigned long long literal_numeric_value;
+    char* filename;
 };
 
 char* make_literal_output(unsigned long long source, unsigned short bytes);

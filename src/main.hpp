@@ -1,6 +1,6 @@
 #ifndef MAIN_HPP
     #define MAIN_HPP
-    #define VERSION "0.0.2"
+    #define VERSION "0.1.0"
     #define NOWHERE (size_t)(-1)
     #define START_ADDRESS 0x0000020000000000
 
@@ -23,6 +23,8 @@
     #include "type/opcode.h"
     #include "type/symbol.h"
     #include "type/token.h"
+
+    char* get_file_contents(char* filename);
 
     extern size_t base_address;
     extern link<opcode>* opcodes;
