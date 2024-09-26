@@ -15,6 +15,7 @@ reg* find_register(char* text) {
 
 void init_registers() {
     link<reg>* last_reg = NULL;
+    printf(" -- registers:");
     for(int i = 0; i < REGISTER_COUNT; ++i) {
         link<reg>* new_reg = new link<reg>();
         new_reg->child = new reg();
@@ -43,8 +44,9 @@ void init_registers() {
             regs = new_reg;
         }
         last_reg = new_reg;
-        printf(" -- register %i = %s\n", new_reg->child->number, new_reg->child->name);
+        printf(" %s", new_reg->child->name);
     }
+    printf("\n");
     last_reg->next = NULL;
     printf(" -- initialized %i registers\n", REGISTER_COUNT);
 }
