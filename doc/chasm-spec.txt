@@ -462,7 +462,7 @@ Word	Bitmask				CHAS Mnemonic		Description
 2vvr	0010 00vv vvvv rrrr	disable r v			clear bit v in r
 2vvr	0010 01vv vvvv rrrr	enable r v			set bit v in r
 2???	0010 10?? ???? ????						debugging functions (see 3.5.)
-2???	0010 11vv vvvv rrrr test r v			set flag E and clear flag Z if bit v of r is true, otherwise clear E and set Z #NEW#
+2???	0010 11vv vvvv rrrr test r v			set flag E and clear flag Z if bit v of r is true, otherwise clear E and set Z
 
 3Tsr	0011 TTTT ssss rrrr	update r s T		Store 64-bit value from (void*) s in r. If (void*)s is <= T, set to T. #NEW#
 
@@ -1257,15 +1257,15 @@ f5**	1111 0101 **** ****						unused
 f6**	1111 0110 **** ****						unused
 f7**	1111 0111 **** ****						unused
 
-f9sr	1111 1001 ssss rrrr	load.wia r s q		load word with immediate adjust: r <- mem[s + q] #NEW#
-fasr	1111 1010 ssss rrrr	load.dia r s q		load dword with immediate adjust: r <- mem[s + q] #NEW#
-fbsr	1111 1011 ssss rrrr	load.ia r s q		load qword with immediate adjust: r <- mem[s + q] #NEW#
+f9sr	1111 1001 ssss rrrr	load.wia r s q		load word with immediate adjust: r <- mem[s + q]
+fasr	1111 1010 ssss rrrr	load.dia r s q		load dword with immediate adjust: r <- mem[s + q]
+fbsr	1111 1011 ssss rrrr	load.ia r s q		load qword with immediate adjust: r <- mem[s + q]
 
 fc**	1111 1100 **** ****						unused
 
-fdsr	1111 1101 ssss rrrr	store.wia r s q		store word with immediate adjust: mem[s + q] <- r #NEW#
-fesr	1111 1110 ssss rrrr	store.dia r s q		store dword with immediate adjust: mem[s + q] <- r #NEW#
-ffsr	1111 1111 ssss rrrr	store.ia r s q		store qword with immediate adjust: mem[s + q] <- r #NEW#
+fdsr	1111 1101 ssss rrrr	store.wia r s q		store word with immediate adjust: mem[s + q] <- r
+fesr	1111 1110 ssss rrrr	store.dia r s q		store dword with immediate adjust: mem[s + q] <- r
+ffsr	1111 1111 ssss rrrr	store.ia r s q		store qword with immediate adjust: mem[s + q] <- r
 
 
 3.5. Debug Instructions

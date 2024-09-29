@@ -123,6 +123,7 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "put.q",   0x1C00, O_MONO | O_DUO);*/
     last_opcode = add_opcode(last_opcode, n++, "disable", 0x2000, O_FLAG | O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "enable",  0x2400, O_FLAG | O_MONO);
+    last_opcode = add_opcode(last_opcode, n++, "test",    0x2C00, O_FLAG | O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "update",  0x3000, O_MONO | O_DUO | O_TRIO_OR_LIT | O_LIT_64);
     last_opcode = add_opcode(last_opcode, n++, "bcopy",   0x5000, O_MONO | O_DUO | O_TRIO_OR_LIT | O_LIT_64);
     last_opcode = add_opcode(last_opcode, n++, "bfill",   0x7000, O_MONO | O_DUO | O_TRIO_OR_LIT | O_LIT_64);
