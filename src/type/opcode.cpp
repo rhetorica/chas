@@ -53,6 +53,14 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "pop.a",   0x023F, O_ZERO);
     last_opcode = add_opcode(last_opcode, n++, "push.h",  0x011F, O_ZERO);
     last_opcode = add_opcode(last_opcode, n++, "pop.h",   0x021F, O_ZERO);
+
+    last_opcode = add_opcode(last_opcode, n++, "rev",     0x0300, O_MONO);
+    last_opcode = add_opcode(last_opcode, n++, "swap2",   0x0310, O_MONO);
+    last_opcode = add_opcode(last_opcode, n++, "swap4",   0x0320, O_MONO);
+    last_opcode = add_opcode(last_opcode, n++, "swap8",   0x0330, O_MONO);
+    last_opcode = add_opcode(last_opcode, n++, "swap16",  0x0340, O_MONO);
+    last_opcode = add_opcode(last_opcode, n++, "swap32",  0x0350, O_MONO);
+    
     last_opcode = add_opcode(last_opcode, n++, "load.a",  0x0430, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "load.h",  0x0410, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "real",    0x0500, O_MONO | O_DUO | O_STATUS_FORBIDDEN_2);
@@ -115,9 +123,9 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "put.q",   0x1C00, O_MONO | O_DUO);*/
     last_opcode = add_opcode(last_opcode, n++, "disable", 0x2000, O_FLAG | O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "enable",  0x2400, O_FLAG | O_MONO);
-    last_opcode = add_opcode(last_opcode, n++, "bcopy",   0x5000, O_MONO | O_DUO | O_TRIO | O_LIT_64);
-    last_opcode = add_opcode(last_opcode, n++, "bfill",   0x7000, O_MONO | O_DUO | O_TRIO | O_LIT_64);
-    last_opcode = add_opcode(last_opcode, n++, "update",  0x3000, O_MONO | O_DUO | O_TRIO | O_LIT_64);
+    last_opcode = add_opcode(last_opcode, n++, "update",  0x3000, O_MONO | O_DUO | O_TRIO_OR_LIT | O_LIT_64);
+    last_opcode = add_opcode(last_opcode, n++, "bcopy",   0x5000, O_MONO | O_DUO | O_TRIO_OR_LIT | O_LIT_64);
+    last_opcode = add_opcode(last_opcode, n++, "bfill",   0x7000, O_MONO | O_DUO | O_TRIO_OR_LIT | O_LIT_64);
     last_opcode = add_opcode(last_opcode, n++, "jmp",     0x6000, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "jne",     0x6040, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "jc",      0x4010, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
@@ -142,10 +150,20 @@ void init_opcodes() {
     last_opcode = add_opcode(last_opcode, n++, "rep.qs",  0x18A0, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "rep.qrs", 0x18B0, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "int",     0xF000, O_OPT_IMM_8);
+    last_opcode = add_opcode(last_opcode, n++, "syscall", 0xF100, O_OPT_IMM_8);
     last_opcode = add_opcode(last_opcode, n++, "iret",    0xF401, O_ZERO);
     last_opcode = add_opcode(last_opcode, n++, "lmmt",    0xF410, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
     last_opcode = add_opcode(last_opcode, n++, "ret",     0xF400, O_ZERO);
     last_opcode = add_opcode(last_opcode, n++, "call",    0xF800, O_MONO_OR_LIT | O_LIT_64 | O_LIT_REF);
+
+    last_opcode = add_opcode(last_opcode, n++, "load.wia", 0xF900, O_MONO | O_DUO | O_DUO_AND_LIT | O_LIT_64 | O_PROC_16);
+    last_opcode = add_opcode(last_opcode, n++, "load.dia", 0xFA00, O_MONO | O_DUO | O_DUO_AND_LIT | O_LIT_64 | O_PROC_32);
+    last_opcode = add_opcode(last_opcode, n++, "load.ia",  0xFB00, O_MONO | O_DUO | O_DUO_AND_LIT | O_LIT_64 | O_PROC_64);
+
+    last_opcode = add_opcode(last_opcode, n++, "store.wia", 0xFD00, O_MONO | O_DUO | O_DUO_AND_LIT | O_LIT_64 | O_PROC_16);
+    last_opcode = add_opcode(last_opcode, n++, "store.dia", 0xFE00, O_MONO | O_DUO | O_DUO_AND_LIT | O_LIT_64 | O_PROC_32);
+    last_opcode = add_opcode(last_opcode, n++, "store.ia",  0xFF00, O_MONO | O_DUO | O_DUO_AND_LIT | O_LIT_64 | O_PROC_64);
+
     last_opcode = add_opcode(last_opcode, n++, "cout",    0x2800, O_OPT_IMM_8);
     last_opcode = add_opcode(last_opcode, n++, "creg",    0x2900, O_MONO);
     last_opcode = add_opcode(last_opcode, n++, "cregx",   0x2910, O_MONO);

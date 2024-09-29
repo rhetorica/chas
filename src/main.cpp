@@ -6,7 +6,7 @@
 
 size_t base_address = START_ADDRESS;
 
-char* get_file_contents(char* filename) {
+char* get_file_contents(char* filename, fpos_t &file_size) {
 	FILE* f = fopen(filename, "r");
     if(f == NULL) {
 		fprintf(stderr, " -- could not open file: %s\n", filename);
@@ -15,7 +15,8 @@ char* get_file_contents(char* filename) {
         fseek(f, 0, SEEK_END);
 		fpos_t pos;
 		fgetpos64(f, &pos);
-		printf(" -- file length: %i\n", pos);
+		file_size = pos;
+		printf(" -- file length: %lli\n", pos);
 		char* buffer = (char*)malloc(sizeof(char) * (pos + 1));
         fseek(f, 0, 0);
 
@@ -32,15 +33,36 @@ char* get_file_contents(char* filename) {
     }
 }
 
+char* get_binary_file_contents(char* filename, fpos_t &file_size) {
+	FILE* f = fopen(filename, "rb");
+    if(f == NULL) {
+		fprintf(stderr, " -- could not open file: %s\n", filename);
+		return NULL;
+	} else {
+        fseek(f, 0, SEEK_END);
+		fpos_t pos;
+		fgetpos64(f, &pos);
+		file_size = pos;
+		printf(" -- file length: %lli\n", pos);
+		char* buffer = (char*)malloc(sizeof(char) * (pos));
+        fseek(f, 0, 0);
+
+		fread(buffer, sizeof(char), file_size, f);
+		fclose(f);
+		return buffer;
+    }
+}
+
 link<token>* all_tokens = NULL;
 link<token>* last_token = NULL;
 
 int process(char* filename) {
 	char* buffer;
 	link<token>* tokens;
-	buffer = get_file_contents(filename);
+	fpos_t size = 0;
+	buffer = get_file_contents(filename, size);
     if(buffer != NULL) {
-		tokens = tokenize(buffer);
+		tokens = tokenize(buffer, size);
 		if(tokens != NULL) {
 			if(all_tokens == NULL)
 				all_tokens = tokens;
@@ -56,6 +78,7 @@ int process(char* filename) {
 			}
 			tk->child->filename = filename;
 			last_token = tk;
+			printf(" -- token processing finished\n");
 			return 0;
 		} else {
 			fprintf(stderr, " -- failed to tokenize file %s\n", filename);
@@ -68,6 +91,8 @@ int process(char* filename) {
 }
 
 int output(char* output_filename) {
+	printf(" -- beginning code generation\n");
+
 	if(all_tokens != NULL) {
 		int failures = collect_labels(all_tokens);
 		if(failures)
@@ -113,8 +138,7 @@ int main(int argc, char* argv[]) {
 		else if(argv[argi][0] == '-' && argv[argi][1] == '-')
 			argj = 2;
 		
-		string testp = string(argv[argi] + argj);
-		char* chars = testp.chars();
+		char* chars = argv[argi] + argj;
 		if(argj) {
 			if(strcmp(chars, "print-opcodes") == 0) {
 				link<opcode>* o = opcodes;
@@ -136,12 +160,10 @@ int main(int argc, char* argv[]) {
 				char functext[16];
 				char r0, r1, r2, vp, ap, skip, w;
 				unsigned short b;
-				unsigned long long v;
 				r0 = 0;
 				r1 = 0;
 				r2 = 0;
 				vp = ap = 0;
-				v = 0x0;
 				b = 0x0;
 				skip = w = 0;
 				while(o != NULL) {
@@ -169,7 +191,7 @@ int main(int argc, char* argv[]) {
 						++hi;
 					}
 
-					if(base_emission & 0xff00 == 0x1800) // rep.* codes
+					if((base_emission & 0xff00) == 0x1800) // rep.* codes
 						tail_valid = 1;
 					else if(strcmp(functext, "ccmp.de") == 0 || strcmp(functext, "ccmp.we") == 0)
 						strcpy(functext, "ccmp_e");
@@ -218,7 +240,7 @@ int main(int argc, char* argv[]) {
 						ap = 0;
 
 					#define EMIT_OPTABLE(final_emission, rr0, rr1, rr2, rb, rvp, rap, rskip, rw, rsub0, rsub1, rsub2) \
-					printf("\t{0x%04llx, &op_%s,\t%3d, %3d, %3d, 0x%02x, %d, %d, %d, %d, 0x%016llx}, // %s %s %s %s \n", \
+					printf("\t{0x%04x, &op_%s,\t%3d, %3d, %3d, 0x%02x, %d, %d, %d, %d, 0x%016llx}, // %s %s %s %s \n", \
 						final_emission, functext, rr0, rr1, rr2, rb, rvp, rap, rskip, rw, F, o->child->text, rsub0, rsub1, rsub2);
 					
 					if(F & O_MONO) {
@@ -230,7 +252,22 @@ int main(int argc, char* argv[]) {
 								for(r1 = 0; r1 < 16; r1++) {
 									if((F & O_STATUS_FORBIDDEN_2) && r1 == 15)
 										continue;
-									EMIT_OPTABLE(base_emission | (r1 << 4) | r0, r0, r1, 0xff, 0xff, vp, ap, skip, w, regname[r0], regname[r1], empty_string);
+
+									if(F & O_TRIO_OR_LIT) {
+										for(r2 = 0; r2 < 16; r2++) {
+											if(r2 == 15) {
+												skip = 4;
+												EMIT_OPTABLE(base_emission | 0x0f00 | ((unsigned short)r1 << 4) | (unsigned short)r0, r0, r1, PC, 0xff, vp, ap, skip, w, regname[r0], regname[r1], "<literal>");
+											} else {
+												skip = 0;
+												EMIT_OPTABLE(base_emission | ((unsigned short)(r2) << 8) | ((unsigned short)r1 << 4) | (unsigned short)r0, r0, r1, r2, 0xff, vp, ap, skip, w, regname[r0], regname[r1], regname[r2]);
+											}
+										}
+									} else if(F & O_DUO_AND_LIT) {
+										EMIT_OPTABLE(base_emission | (r1 << 4) | r0, r0, r1, PC, 0xff, vp, ap, skip, w, regname[r0], regname[r1], "<literal>");
+									} else {
+										EMIT_OPTABLE(base_emission | (r1 << 4) | r0, r0, r1, 0xff, 0xff, vp, ap, skip, w, regname[r0], regname[r1], empty_string);
+									}
 								}
 							} else if(F & O_FLAG) {
 								for(b = 0; b < 64; b++) {
@@ -293,12 +330,7 @@ int main(int argc, char* argv[]) {
 				++argi;
 				if(argi < argc) {
 					base_address = strtoull(argv[argi], NULL, 0);
-					if(base_address < 0) {
-						fprintf(stderr, " -- illegal or malformed base address: %s\n", argv[argi]);
-						failures += 1;
-					} else {
-						fprintf(stderr, " -- base address set to: 0x%016llx\n", base_address);
-					}
+					fprintf(stderr, " -- base address set to: 0x%016llx\n", base_address);
 				} else {
 					fprintf(stderr, " -- %s: please specify a base address\n", chars);
 					failures += 1;
@@ -324,7 +356,6 @@ int main(int argc, char* argv[]) {
 			}
 			failures += process(argv[argi]);
 		}
-		delete chars;
 		if(failures) {
 			fprintf(stderr, " -- aborted\n");
 			return failures;

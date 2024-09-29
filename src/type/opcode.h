@@ -23,7 +23,7 @@ struct opcode {
 // opcode takes an s register argument:
 #define O_DUO           0x00000010
 // opcode takes a T register argument or a QWORD literal if T is 1111:
-#define O_TRIO          0x00000020
+#define O_TRIO_OR_LIT          0x00000020
 // opcode takes a literal bit number in the middle ('clear' and 'set'):
 #define O_FLAG          0x00000040
 // opcode takes an R register argument, in the last 4 bits (or 64-bit literal):
@@ -64,6 +64,8 @@ struct opcode {
 #define O_ALIAS 0x00800000
 // opcode may not take STATUS as second operand:
 #define O_STATUS_FORBIDDEN_2 0x01000000
+// opcode uses r, s, and a literal:
+#define O_DUO_AND_LIT 0x01000000
 
 
 void init_opcodes();

@@ -11,21 +11,26 @@ char* make_substr(char* source, fpos_t word_start, fpos_t word_end) {
 
 char* make_literal_output(unsigned long long source, unsigned short bytes) {
 	char* o = (char*)malloc(sizeof(char) * bytes);
-	o[bytes - 1] = source & 0xff;
-	if(bytes >= 2)
-		o[bytes - 2] = (source & 0xff00) >> 8;
-	if(bytes >= 4) {
-		o[bytes - 3] = (source & 0xff0000) >> 16;
-		o[bytes - 4] = (source & 0xff000000) >> 24;
-	}
-	if(bytes == 8) {
-		o[bytes - 5] = (source & 0xff00000000) >> 32;
-		o[bytes - 6] = (source & 0xff0000000000) >> 40;
-		o[bytes - 7] = (source & 0xff000000000000) >> 48;
-		o[bytes - 8] = (source & 0xff00000000000000) >> 56;
-	}
-	// be the sound change you want to see in the world - sandhi
-	
+	#if defined(LITTLE_ENDIAN)
+		while(bytes--) {
+			o[bytes] = (source >> (unsigned long long)(bytes << 3)) & 0xff;
+		}
+	#else
+		o[bytes - 1] = source & 0xff;
+		if(bytes >= 2)
+			o[bytes - 2] = (source & 0xff00) >> 8;
+		if(bytes >= 4) {
+			o[bytes - 3] = (source & 0xff0000) >> 16;
+			o[bytes - 4] = (source & 0xff000000) >> 24;
+		}
+		if(bytes == 8) {
+			o[bytes - 5] = (source & 0xff00000000) >> 32;
+			o[bytes - 6] = (source & 0xff0000000000) >> 40;
+			o[bytes - 7] = (source & 0xff000000000000) >> 48;
+			o[bytes - 8] = (source & 0xff00000000000000) >> 56;
+		}
+		// be the sound change you want to see in the world - sandhi
+	#endif
 	return o;
 }
 
@@ -74,7 +79,7 @@ link<token>* add_token(link<token>* last_token, char* raw_text, fpos_t word_star
 						token_type = TK_LIT_QWORD;
 						new_token->child->literal_numeric_value = strtoull(text + 2, NULL, 16);
 					} else {
-						fprintf(stderr, "invalid hex literal on line %i: %s\n", line_number, text);
+						fprintf(stderr, "invalid hex literal on line %lli: %s\n", line_number, text);
 					}
 				} else if(text[1] == 'b' && text[0] == '0') {
 					if(len <= 10) {
@@ -90,10 +95,10 @@ link<token>* add_token(link<token>* last_token, char* raw_text, fpos_t word_star
 						token_type = TK_LIT_QWORD;
 						new_token->child->literal_numeric_value = strtoull(text + 2, NULL, 2);
 					} else {
-						fprintf(stderr, "invalid binary literal on line %i: %s\n", line_number, text);
+						fprintf(stderr, "invalid binary literal on line %lli: %s\n", line_number, text);
 					}
 				} else if(len > 20) {
-					fprintf(stderr, "impossibly long numeric literal on line %i: %s\n", line_number, text);
+					fprintf(stderr, "impossibly long numeric literal on line %lli: %s\n", line_number, text);
 				} else {
 					new_token->child->literal_numeric_value = strtoull(text, NULL, 0);
 					if(new_token->child->literal_numeric_value <= 0xff) {
@@ -148,7 +153,7 @@ link<token>* add_token(link<token>* last_token, char* raw_text, fpos_t word_star
 		new_token->child->output[7] = (oli >>  0) & 0xff;
 		new_token->child->output_size = 8 + oli + (oli % 2);
 		// size_t retlen = ((new_token->child->output[0]) << 8) + (new_token->child->output[1]);
-		printf("created TK_STRING output with content length %i for source string '%s'\n", len, new_token->child->text);
+		printf("created TK_STRING output with content length %lli for source string '%s'\n", len, new_token->child->text);
 	}
 	
 	if(last_token != NULL)
@@ -157,10 +162,9 @@ link<token>* add_token(link<token>* last_token, char* raw_text, fpos_t word_star
 	return new_token;
 }
 
-link<token>* tokenize(char* raw_text) {
+link<token>* tokenize(char* raw_text, fpos_t size) {
 	fpos_t ws = -1;
 	fpos_t we = -1;
-	fpos_t ls = 0;
 	fpos_t mode = 0; // 0 = code, 1 = double string, 2 = comment, 3 = single string
 	link<token>* first_token = new link<token>();
 	first_token->child = new token();
@@ -170,7 +174,7 @@ link<token>* tokenize(char* raw_text) {
 	fpos_t n = 1;
 	fpos_t ln = 1;
 	
-	for(fpos_t i = 0; raw_text[i] != '\0'; ++i) {
+	for(fpos_t i = 0; i < size; ++i) {
 		char d = raw_text[i + 1];
 		char c = raw_text[i];
 
@@ -288,7 +292,6 @@ link<token>* tokenize(char* raw_text) {
 	}
 
 	link<token>* t = first_token->next;
-	fpos_t j = 0;
 	ln = 0;
 	while(t != NULL) {
 		if(t->child != NULL) {

@@ -14,7 +14,7 @@
                                Pharos Computer Inc
 
                                Created: 2024-08-19
-                               Updated: 2024-09-24
+                               Updated: 2024-09-28
 
 
 
@@ -22,9 +22,9 @@
 CONTENTS
 ========
 
-1. GENERAL
-  1.1. To Do
-  1.2. CHASM Versions
+1. INTRODUCTION
+  1.1. Feature Summary
+  1.2. To Do
 2. REGISTERS
   2.1. Data Formats
     2.1.1. Unsigned Integers
@@ -102,9 +102,9 @@ CONTENTS
 
 (*) Unfinished or incomplete specification
 
-==========
-1. GENERAL
-==========
+===============
+1. INTRODUCTION
+===============
 
 CHASM (Container for Hybrid-Architecture Simulated Microkernels) is a register-based machine designed to function as a VM for the LETHE hobbyist operating system project. It succeeds an earlier design called CHARM (Compact High-Level Architecture Register Machine) which never got off the drawing board. CHASM's goals are to be:
 
@@ -114,16 +114,36 @@ CHASM (Container for Hybrid-Architecture Simulated Microkernels) is a register-b
  - not idiosyncratic: easy to port software to, and from
  - avoidant of any backward compatibility that might lead to design complications
  - thoroughly big-endian
- - based entirely on 64-bit registers and a 64-bit memory space
+ - based entirely on 64-bit data and address registers
 
-CHASM is implemented using C++ and SDL3 under MinGW, and should be broadly portable.
-
-The CHASM CPU parses 16-bit instructions, some of which may have a 'trailer' (additional words) for addresses and literals. The longest total instruction length is 80 bits, or 5 words.
-
-The CHASM environment provides memory mapping, paging, and ring-based interrupt restrictions, into a 64-bit memory space.
+The current CHASM simulator is implemented using C++ and SDL3 under MinGW64, and should be broadly portable to other 64-bit host platforms.
 
 
-1.1. To Do
+1.1. Feature Summary
+--------------------
+
+CHASM provides 24 registers, all of which are 64-bit:
+
+ - 8 general-purpose data registers, which can be interpreted as all supported data types by using different opcodes
+ - 8 supplementary address registers, meant to be used to implement runtimes for Lisp programming languages
+ - 8 system registers with uses inspired by various popular ISAs
+
+Instructions in CHASM are 16 bits in length. When numeric constants are needed, trailing literal values ("trailers") are inserted directly into the code, as on x86 systems. This avoids the awkward multi-step dance that MIPS assemblers require to avoid clobbering.
+
+Memory is accessed in units of 16-bit words rather than directly addressing individual 8-bit bytes. This ensures opcodes are always aligned, though it does require extra care when converting data from little-endian sources.
+
+Memory addresses are always direct: they consist of one part that indicates the word number in the current memory layout. This simplifies compiler and language runtime development, as no code segment pointers must be adjusted when entering linked object code; the kernel can instead patch all addresses during loading.
+
+CHASM uses a 48-bit addressing scheme when no page table is active. The top 8 bits are used to identify the memory source (e.g. 00 = main system memory, 02 = video memory) and the bottom 40 are the word index within that bank. Thus 2 TB (2^40 words) of RAM are directly addressable. When a page table is in use, pages of anywhere from 256 w to 65536 w (512 bytes to 128 kb) can be allocated. In both cases any unused bits are set aside for tagging by software.
+
+The CPU includes extra instructions for manipulating character-based strings, including most fundamental operations used in typical string libraries. All strings are prefixed with a 64-bit length, so developers are incentivized to use these safe strings rather than implementing their own less-safe varieties.
+
+Eight different security rings are implemented, in contrast to the more typical 2 (privileged and unprivileged) modes found in most modern systems. This feature is intended to specifically support microkernel-based operating systems, as kernel servers, daemons, and user-mode drivers can all be assigned different rings and interrupt masks. When a software interrupt occurs, the system can even switch page tables on the fly, making it possible to have devices truly owned by non-kernel programs.
+
+Finally, this document specifies not only the inner workings of the CHASM CPU, but also hardware interfaces for a wide range of peripheral devices as supported by the CHASM simulator. For the most part these are simplified compared to commercial devices, to help with building placeholder implementations prior to porting software to commodity platforms.
+
+
+1.2. To Do
 ----------
 
 The CHASM specification is not yet complete. The following features may be added in the future:
@@ -135,13 +155,8 @@ The CHASM specification is not yet complete. The following features may be added
  - Outstanding non-serial devices: graphics tablet, camera, audio in, audio out, modem
 
 Instructions marked with #NEW# indicate the emulator has not yet been updated to recognize them, or that the format has changed such that the current implementation is incompatible.
- 
 
-1.2. CHASM Versions
--------------------
 
- - Text not marked with CHASMv### is part of the baseline CHASM specification.
- - CHASMv2 adds support for binary-coded decimal (BCD) and LISP CONS datatypes.
 
 ============
 2. REGISTERS
@@ -158,14 +173,14 @@ Number	Name	Description
 0101    f		general-purpose data register
 0110    g		general-purpose data register
 0111    h		general-purpose data register
-0000	a.d		CHASMv2 cons decrement register
-0001    b.d		CHASMv2 cons decrement register
-0010    c.d		CHASMv2 cons decrement register
-0011    d.d		CHASMv2 cons decrement register
-0100    e.d		CHASMv2 cons decrement register
-0101    f.d		CHASMv2 cons decrement register
-0110    g.d		CHASMv2 cons decrement register
-0111    h.d		CHASMv2 cons decrement register
+0000	a.d		cons decrement register
+0001    b.d		cons decrement register
+0010    c.d		cons decrement register
+0011    d.d		cons decrement register
+0100    e.d		cons decrement register
+0101    f.d		cons decrement register
+0110    g.d		cons decrement register
+0111    h.d		cons decrement register
 1000	pc		program counter - indicates address of next instruction; uses memory mapping
 1001	ra		return address - stack pointer to register backup of code that triggered the current interrupt
 1010	sb		stack base - uses memory mapping
@@ -184,17 +199,26 @@ Number	Name	Description
 					06		0x0000000000000040		n/a		unset on CMP
 					07		0x0000000000000080		n/a		unset on CMP
 					
-					0a-08	0x0000000000000700		R2-0	Ring (000-111)
-					0b		0x0000000000000800		M		Memory Map Enable
-					0c		0x0000000000001000		n/a		unused (formerly Interrupt Enable)
-					0d		0x0000000000002000		IP		Interrupt Pending - set to 1 when a masked interrupt occurs
-					0e		0x0000000000004000		H		Halt - this CPU stops
-					0f		0x0000000000008000		J		CPU jumped last instruction
+					08		0x0000000000000100		BM		Pairwise Multi-Bytes Mode
+					09		0x0000000000000200
+					0a		0x0000000000000400
+					0b		0x0000000000000800
+					0c		0x0000000000001000
+					0d		0x0000000000002000
+					0e		0x0000000000004000
+					0f		0x0000000000008000
 					
-					10-17	0x0000000000ff0000		CI		Current Interrupt (1-254)
+					10		0x0000000000010000
+					11		0x0000000000020000
+					12		0x0000000000040000		
+					13		0x0000000000080000		
+					14		0x0000000000100000		
+					15		0x0000000000200000		
+					16		0x0000000000400000		
+					17		0x0000000000800000		
 					
-					18		0x0000000001000000		RM0		Next IRET is Type D (see 5.5.)
-					19		0x0000000002000000		RM1		Next IRET is Type E (see 5.5.)
+					18		0x0000000001000000
+					19		0x0000000002000000
 					1a		0x0000000004000000		
 					1b		0x0000000008000000		
 					1c		0x0000000010000000		
@@ -202,27 +226,21 @@ Number	Name	Description
 					1e		0x0000000040000000		
 					1f		0x0000000080000000		
 					
-					20		0x0000000100000000		
-					21		0x0000000200000000		
-					22		0x0000000400000000		
-					23		0x0000000800000000		
-					24		0x0000001000000000		
-					25		0x0000002000000000		
-					26		0x0000004000000000		
+					20		0x0000000100000000		R0		Ring Low Bit (00?)
+					21		0x0000000200000000		R1		Ring Middle Bit (0?0)
+					22		0x0000000400000000		R2		Ring High Bit (?00)
+					22-20	0x0000000700000000		R0-R2	Ring Number (0b000-0b111)
+					23		0x0000000800000000		M		Memory Map Enable		
+					24		0x0000001000000000		IP		Interrupt Pending - set to 1 when a masked interrupt occurs
+					25		0x0000002000000000		J		CPU jumped last instruction		
+					26		0x0000004000000000		H		Halt - this CPU stops
 					27		0x0000008000000000		
 					
-					28		0x0000010000000000		
-					29		0x0000020000000000		
-					2a		0x0000040000000000		
-					2b		0x0000080000000000		
-					2c		0x0000100000000000		
-					2d		0x0000200000000000		
-					2e		0x0000400000000000		
-					2f		0x0000800000000000		
+					2f-28	0x0000ff0000000000		CI		Current Interrupt (1-254)
 					
-					30		0x0001000000000000		
-					31		0x0002000000000000		
-					32		0x0004000000000000		
+					30		0x0001000000000000		RM0		Next IRET is Type D (see 5.5.)		
+					31		0x0002000000000000		RM1		Next IRET is Type E (see 5.5.)		
+					32		0x0004000000000000		RM2		Preserve registers inside interrupt
 					33		0x0008000000000000		
 					34		0x0010000000000000		
 					35		0x0020000000000000		
@@ -238,6 +256,8 @@ Number	Name	Description
 					3e		0x4000000000000000		
 					3f		0x8000000000000000		
 
+The lower half of the 'status' register is read-only except in privileged (ring 0) mode.
+
 Arithmetic instructions (those that start with hex digits 0x8 through 0xE) are limited to registers 'a' through 'h'. Data must be moved between registers with `copy` or `swap` to perform arithmetic operations on the contents of the other registers.
 
 Some operations that work on the higher registers cannot access 'status' at all, as many instructions will interpret an attempt to interact with this register as a request to load an immediate literal or perform some other special action. (These are typically not operations you'd want to use on the 'status' register, like interpret its contents as an address in memory.) These are marked with a capital R, S, or T in the instructions list. A lower-case r, s, or t accepts a reference to 'status'.
@@ -251,16 +271,16 @@ MMR		Reference to current Memory Map Table (see 6.); set with `lmmt` instruction
 2.1. Data Formats
 -----------------
 
-All data in CHASM is big-endian, unless otherwise specified. Bits are numbered from the rightmost (least-significant) to the leftmost (most-significant), starting with zero. In the binary number 1111111111111101, the bit at index 1 has the value 0.
+All data in CHASM is big-endian unless otherwise specified. Bits are numbered from the rightmost (least-significant) to the leftmost (most-significant), starting with zero. In the binary number 1111111111111101, the bit at index 1 has the value 0.
 
-Bitmap diagrams in this specification are generally written left-to-right, with the left side being earlier (bigger) than the right. Addresses universally indicate the word at which a data item starts, e.g. storing a 64-bit value at 0x1000 will cause it to take up the spaces 0x1000 through 0x1003, with its smallest 16 bits at 0x1003 and largest at 0x1000.
+Bitmap diagrams in this specification are generally written left-to-right, with the left side being earlier (bigger) than the right. As on most architectures, addresses universally indicate the word at which a data item starts, e.g. storing a 64-bit value at 0x1000 will cause it to take up the spaces 0x1000 through 0x1003, with its smallest 16 bits at 0x1003 and largest at 0x1000.
 
 
 2.1.1. Unsigned Integers
 
 The standard data format in CHASM is an unsigned 64-bit binary integer. It can contain any value from 0 to 18,446,744,073,709,551,615.
 
-Certain operations may also use 32-bit and 16-bit unsigned integers as a second operand.
+Certain operations may also use 32-bit and 16-bit unsigned integers, typically denoted by the presence of ".d" (double word) or ".w" (word) in the mnemonic.
 
 
 2.1.2. Signed Integers
@@ -275,6 +295,8 @@ Certain operations may also use 32-bit and 16-bit signed integers as a second op
 A CHASM byte is 8 bits. Certain opcodes, like `int`, take immediate 8-bit values embedded directly into the instruction. Unless otherwise stated, any explicit mention of a byte refers to an unsigned binary integer.
 
 The multi-byte type is a vector of eight values of 8 bits each. They behave as independent unsigned integers, and obey saturation arithmetic (subtraction never produces a value below zero, addition never produces a value above 255.) Certain operations may also use 32-bit and 16-bit multi-byte values, in which case only the bottom portion of the register is affected.
+
+Normally, the second argument (s or a literal) in a multi-bytes arithmetic instruction (opcodes in the range 0xa000 to 0xafff) is expected to contain a single value that is applied to all the elements of the first argument (r). However when the MB flag (0x09, bitmask 0x100) is enabled, the operation is conducted in pairwise mode instead, treating both operands as a vector of 2 bytes (.w instructions), 4 (.d instructions), or 8 bytes (default).
 
 
 2.1.4. Floating Point Numbers
@@ -292,7 +314,7 @@ The DRAKIRA vector processor can natively operate on 32-bit single-precision bin
 
 2.1.5. Strings
 
-A CHASMv2 string consists of a 64-bit size value followed by zero or more bytes of text. CHASM makes no assurances about the encoding of the text. If a CHASM string is an odd number of bytes in length, then the last word's lower eight bits are ignored.
+A CHASM-style string consists of a 64-bit size value followed by zero or more bytes of text. CHASM makes no assurances about the encoding of the text. If a CHASM string is an odd number of bytes in length, then the last word's lower eight bits are ignored.
 
 An empty string looks the same as an empty 64-bit integer:
 
@@ -315,7 +337,7 @@ Certain string operations may fail. These are strpos, getbyte, and setbyte. The 
 
 2.1.6. CONS Addresses
 
-In CHASMv2, the 8 data registers (a-h) have shadow registers called a.d, b.d, c.d, etc. These are used with special load, store, put, and get operations (.o and .c) for more efficient processing of datatypes for programming languages in the Lisp family. The contents of .d registers are always assumed to be unsigned 64-bit integers (see 2.1.1.)
+The 8 standard data registers (a-h) have counterpart registers called a.d, b.d, c.d, etc. These are used with special load, store, put, and get operations (.o and .c) for more efficient processing of datatypes for programming languages in the Lisp family. The contents of .d registers are always assumed to be unsigned 64-bit integers (see 2.1.1.)
 
 
 2.1.7. Bitwise
@@ -353,81 +375,104 @@ R, S, T: registers, but 1111 is reserved (usually means load a trailing literal)
 
 Word	Bitmask				CHAS Mnemonic		Description
 00**	0000 0000 0000 0000	null				do nothing
-018R	0000 0001 1000 RRRR	push R				push register r, or literal
-014R	0000 0001 0100 RRRR	push.d R			push lower half of register r (double word), or literal
-012R	0000 0001 0010 RRRR	push.w R			push lower quarter of register r (16-bit word), or literal
-028r	0000 0010 1000 rrrr	pop r				pop register r
-024r	0000 0010 0100 rrrr	pop.d r				pop lower half of register r (double word)
-022r	0000 0010 0010 rrrr	pop.w r				pop lower quarter register r (16-bit word)
+011f	0000 0001 0001 1111	push.h				push all data registers (a-h, a.d-h.d) to stack
 013f	0000 0001 0011 1111	push.a				push all registers to stack except pc and status
+012R	0000 0001 0010 RRRR	push.w R			push lower quarter of register r (16-bit word), or literal
+014R	0000 0001 0100 RRRR	push.d R			push lower half of register r (double word), or literal
+018R	0000 0001 1000 RRRR	push R				push register r, or literal
+021f	0000 0010 0001 1111	pop.h				pop all data registers (a-h, a.d-h.d) from stack
 023f	0000 0010 0011 1111	pop.a				pop all registers from stack except pc and status
-011f	0000 0001 0001 1111	push.h				push all data registers (a-h) to stack
-021f	0000 0010 0001 1111	pop.h				pop all data registers (a-h) from stack
-03**	0000 0011 **** **** 					unused
-043R	0000 0100 **11 RRRR	load.a R			load all registers except pc and status from (void*)r (or from literal address if R is 1111)
-041R	0000 0100 **01 RRRR	load.h R			load all data registers (a-h) from (void*)r (or from literal address if R is 1111)
+022r	0000 0010 0010 rrrr	pop.w r				pop lower quarter register r (16-bit word)
+024r	0000 0010 0100 rrrr	pop.d r				pop lower half of register r (double word)
+028r	0000 0010 1000 rrrr	pop r				pop register r
+
+030r	0000 0011 0000 rrrr rev r				reverse the order of all the bits in register r
+031r	0000 0011 0001 rrrr swap2 r				swap odd and even bits in r
+032r	0000 0011 0010 rrrr swap4 r				swap odd and even nibbles in r
+033r	0000 0011 0011 rrrr swap8 r				swap odd and even bytes in r
+034r	0000 0011 0100 rrrr swap16 r			swap odd and even words in r
+												 -- usually sufficient for importing data from little-endian machines
+035r	0000 0011 0101 rrrr swap32 r			swap odd and even dwords in r
+
+043R	0000 0100 0011 RRRR	load.a R			load all registers except pc and status from (void*)r (or from literal address if R is 1111)
+041R	0000 0100 0001 RRRR	load.h R			load all data registers (a-h) from (void*)r (or from literal address if R is 1111)
+
 05**	0000 0101 SSSS rrrr real r S			populate r with real (flat) memory address from virtual address in register S, or -1 if unmapped
-05f*	0000 0101 1111 rrrr real.i r <address>	as `real`, but with literal address
-06**	0000 0110 SSSS rrrr unreal r S			populate r with virtually mapped memory address corresponding to real (flat) location S
-06f*	0000 0110 1111 rrrr	unreal.i r <address>	as `unreal`, but with literal address
+05f*	0000 0101 1111 rrrr real.i r <addr>	as `real`, but with literal address
+
+06**	0000 0110 SSSS rrrr unreal r S			populate r with virtually mapped memory address corresponding to real (flat) location S #NEW#
+06f*	0000 0110 1111 rrrr	unreal.i r <addr>	as `unreal`, but with literal address #NEW#
+
 07**	0000 0111 **** ****						unused
-083R	0000 1000 **11 RRRR	store.a R			store all registers except pc and status at (void*)r (or at literal address if R is 1111)
-081R	0000 1000 **01 RRRR	store.h R			store all data registers (a-h) to (void*)r (or at literal address if R is 1111)
+
+083R	0000 1000 0011 RRRR	store.a R			store all registers except pc and status at (void*)r (or at literal address if R is 1111)
+081R	0000 1000 0001 RRRR	store.h R			store all data registers (a-h) to (void*)r (or at literal address if R is 1111)
+
 09**	0000 1001 **** **** 					unused
+
 0a**	0000 1010 **** ****						unused
-0bsr	0000 1011 ssss rrrr cdr r s				CHASMv2 get s.d and store in r.a (CONS shadow decrement register)
+
+0bsr	0000 1011 ssss rrrr cdr r s				get s.d and store in r.a (CONS shadow decrement register)
 												-- if r is 'status', becomes `flip s`
-0bsf	0000 1011 ssss 1111 flip s				CHASMv2 swap value of s.a and s.d (CONS shadow decrement register)
+0bsf	0000 1011 ssss 1111 flip s				swap value of s.a and s.d (CONS shadow decrement register)
+
 0csr	0000 1100 ssss rrrr	copy r s			copy value from s into r
-0dsr	0000 1101 ssss rrrr	unused
-0esr	0000 1110 ssss rrrr	unused
+
+0d**	0000 1101 **** ****						unused
+
+0e**	0000 1110 **** ****						unused
+
 0fsr	0000 1111 ssss rrrr	swap r s			swap values of r and s registers
 
 10sr	0001 0000 ssss rrrr load.w r s			load 16 bits from (void*)s into r
 11sr	0001 0001 ssss rrrr load.d r s			load 32 bits from (void*)s into r
 12sr	0001 0010 ssss rrrr load r s			load 64 bits from (void*)s into r
-131r	0001 0011 0001 rrrr load.wi r <address>	load 64-bit literal as address and get 16 bits to put in r
-132r	0001 0011 0010 rrrr load.di r <address>	load 64-bit literal as address and get 32 bits to put in r
-134r	0001 0011 0100 rrrr load.i r <address>	load 64-bit literal as address and get 64 bits to put in r
+131r	0001 0011 0001 rrrr load.wi r <addr>	load 64-bit literal as address and get 16 bits to put in r
+132r	0001 0011 0010 rrrr load.di r <addr>	load 64-bit literal as address and get 32 bits to put in r
+134r	0001 0011 0100 rrrr load.i r <addr>	load 64-bit literal as address and get 64 bits to put in r
 139r	0001 0011 1001 rrrr set.w r <value>		load 16-bit literal into the bottom 16 bits of r
 13ar	0001 0011 1010 rrrr set.d r <value>		load 32-bit literal into the bottom 32 bits of r
 13cr	0001 0011 1100 rrrr set r <value>		load 64-bit literal into register r
-13fr	0001 0011 1111 0rrr set.c r <value>		CHASMv2 load 64-bit literal into r.d (r must be a-h)
+13fr	0001 0011 1111 0rrr set.c r <value>		load 64-bit literal into r.d (r must be a-h)
 13fr	0001 0011 1111 0rrr setcdr.i r <value>	CHAS synonym of set.c
 14sr	0001 0100 ssss rrrr store.w r s			store 16 bits to (void*)s from r
 15sr	0001 0101 ssss rrrr store.d r s			store 32 bits to (void*)s from r
 16sr	0001 0110 ssss rrrr store r s			store 64 bits to (void*)s from r
 171r	0001 0111 0001 rrrr store.wi r <addr>	load 64-bit literal as address and store 16 bits from r
 172r	0001 0111 0010 rrrr store.di r <addr>	load 64-bit literal as address and store 32 bits from r
-174r	0001 0111 0100 rrrr store.i r <address>	load 64-bit literal as address and store 64 bits from r
+174r	0001 0111 0100 rrrr store.i r <addr>	load 64-bit literal as address and store 64 bits from r
 
 18??	0001 1000 ???? ????						'rep' instructions (see 3.3.)
 
-19Sr	0001 1001 SSSS 0rrr	load.c r S			CHASMv2 load 64 bits from (void*)s into r.d (r must be a-h)
-1aSr	0001 1010 SSSS 0rrr	store.c r S			CHASMv2 store 64 bits to (void*)s from r.d (r must be a-h)
-19fr	0001 1001 1111 0rrr	load.ci r <addr>	CHASMv2 load 64 bits from <addr> into r.d (r must be a-h)
-1afr	0001 1010 1111 0rrr	store.ci r <addr>	CHASMv2 store 64 bits to <addr> from r.d (r must be a-h)
-1dSr	0001 1101 SSSS 0rrr	load.o r S			CHASMv2 load 128 bits from (void*)s into r and r.d (r must be a-h)
+19Sr	0001 1001 SSSS 0rrr	load.c r S			load 64 bits from (void*)s into r.d (r must be a-h)
+1aSr	0001 1010 SSSS 0rrr	store.c r S			store 64 bits to (void*)s from r.d (r must be a-h)
+19fr	0001 1001 1111 0rrr	load.ci r <addr>	load 64 bits from <addr> into r.d (r must be a-h)
+1afr	0001 1010 1111 0rrr	store.ci r <addr>	store 64 bits to <addr> from r.d (r must be a-h)
+1dSr	0001 1101 SSSS 0rrr	load.o r S			load 128 bits from (void*)s into r and r.d (r must be a-h)
 1dSr	0001 1101 SSSS 0rrr	follow.a r S		CHAS synonym for load.o
-1eSr	0001 1110 SSSS 0rrr	store.o r S			CHASMv2 store 128 bits to (void*)s from r and r.d (r must be a-h)
-1dfr	0001 1101 1111 0rrr	load.oi r <addr>	CHASMv2 load 128 bits from <addr> into r and r.d (r must be a-h)
-1efr	0001 1110 1111 0rrr	store.oi r <addr>	CHASMv2 store 128 bits to <addr> from r and r.d (r must be a-h)
-1cSr	0001 1100 SSSS 0rrr	load.co r S			CHASMv2 load 128 bits from (void*)s.d into r and r.d (r must be a-h)
+1eSr	0001 1110 SSSS 0rrr	store.o r S			store 128 bits to (void*)s from r and r.d (r must be a-h)
+1dfr	0001 1101 1111 0rrr	load.oi r <addr>	load 128 bits from <addr> into r and r.d (r must be a-h)
+1efr	0001 1110 1111 0rrr	store.oi r <addr>	store 128 bits to <addr> from r and r.d (r must be a-h)
+1cSr	0001 1100 SSSS 0rrr	load.co r S			load 128 bits from (void*)s.d into r and r.d (r must be a-h)
 1cSr	0001 1100 SSSS 0rrr	follow.d r S		CHAS synonym for load.co
-1fSr	0001 1111 SSSS 0rrr	store.co r S		CHASMv2 store 128 bits to (void*)s.d from r and r.d (r must be a-h)
-1bSr	0001 1011 SSSS 0rrr	setcdr r S			CHASMv2 copy value of s.a into r.d (r must be a-h)
+1fSr	0001 1111 SSSS 0rrr	store.co r S		store 128 bits to (void*)s.d from r and r.d (r must be a-h)
+1bSr	0001 1011 SSSS 0rrr	setcdr r S			copy value of s.a into r.d (r must be a-h)
 
 
 2vvr	0010 00vv vvvv rrrr	disable r v			clear bit v in r
 2vvr	0010 01vv vvvv rrrr	enable r v			set bit v in r
-2???	0010 1??? ???? ????						debugging functions (see 3.5.)
+2???	0010 10?? ???? ????						debugging functions (see 3.5.)
+2???	0010 11vv vvvv rrrr test r v			set flag E and clear flag Z if bit v of r is true, otherwise clear E and set Z #NEW#
 
 3Tsr	0011 TTTT ssss rrrr	update r s T		Store 64-bit value from (void*) s in r. If (void*)s is <= T, set to T. #NEW#
 
 4???	0100 ???? ???? ????						positive jump instructions (see 3.2.)
+
 5Tsr	0101 TTTT ssss rrrr	bcopy r s T			copy T words from (void*)r to (void*)s (if T = 1111, read qword literal)
+
 6Tsr	0110 ???? ???? ????						negative jump instructions (see 3.2.)
-7Tsr	0111 TTTT ssss rrrr	bfill r s T			fill T words at (void*)s with contents of r (if T = 1111, read qword literal)
+
+7Tsr	0111 TTTT ssss rrrr	bfill r s T			fill T words at (void*)s with contents of r (if T = 1111, read qword literal) #NEW#
 
 ????	1??? ???? ???? ????						arithmetic instructions (see 3.1.)
 f???	1111 ???? ???? ???? 					kernel group (see 3.4.)
@@ -472,8 +517,8 @@ Hex	Code	Abbreviation	Description
 a	010		b 				multi-bytes
 b	011		f 				floating-point
 c	100		n/a 			bitwise
-d	101		c 				CHASMv2 cons (unsigned integer in .d partition)
-e	110		n/a				CHASMv2 strings
+d	101		c 				cons (unsigned integer in .d partition)
+e	110		n/a				strings
 
 The datatype f/111 is out of range, and signifies a jump instruction (see 3.2.)
 
@@ -493,12 +538,14 @@ e/f	111		cmp 		Compare (set status bits C, L, E, G, Z, S)
 
 The cmp operation is not defined for the multi-bytes or bitwise datatypes.
 
+
 The unsigned integer datatype has the following additional operation codes:
 
 Hex	Code	Mnemonic	Description
 0/1	000		mod			Divide and store remainder in first register
 4/5	010		lsh			Left shift and store in first register
 a/b	101		rsh			Right shift and store in first register
+
 
 The signed integer datatype has the additional operation codes:
 
@@ -507,12 +554,20 @@ Hex	Code	Mnemonic	Description
 4/5	010		lsh			Sign-extend left shift and store in first register
 a/b	101		rsh			Sign-extend right shift and store in first register
 
-The multi-bytes datatype has the additional operation code:
+
+The multi-bytes datatype has the following operation codes:
 
 Hex	Code	Mnemonic	Description
 0/1	000		mod			Divide and store remainder in first register
+2/3	001		add			Add and store in first register
+6/7	011		sub 		Subtract and store in first register
+8/9	100		mul 		Multiply and store in first register
+c/d	110		div 		Divide and store in first register
 
-However, note that cmp is undefined for the multi-bytes datatype, as the result may differ between elements.
+cmp is undefined for the multi-bytes datatype, as the result may differ between elements.
+
+Note: The behavior of the multi-bytes datatype operations changes when the MB flag is enabled. See 2.1.3.
+
 
 The floating-point datatype has the following additional operation codes:
 
@@ -520,7 +575,8 @@ Hex	Code	Mnemonic	Description
 4/5	010		pow			Raise to exponent and store in first register
 a/b	101		log			Take logarithm of first operand using second as base and store in first register
 
-The CHASMv2 cons datatype has the additional operation codes:
+
+The cons datatype has the additional operation codes:
 
 Hex	Code	Mnemonic	Description
 0/1	000		cmp.e		Compare r.d with s.d
@@ -529,7 +585,8 @@ a/b	101		rsh			Right shift and store in first register
 
 The ccmp.[wdq] operations compare with s.a, so ccmp.[wdq]e is provided to allow direct comparison between decrement registers. It cannot be combined with any modifiers other than size.
 
-The bitwise datatype has entirely different operation codes and mnemonics:
+
+The bitwise datatype has the following operation codes:
 
 Hex	Code	Mnemonic	Description
 0/1	000		not			Negate second register; store in first register
@@ -540,7 +597,8 @@ a/b	101		or			OR and store in first register
 c/d	110		rol			Rotate left and store in first register
 e/f	111		popcount	Count number of enabled bits in second register and store in first
 
-The CHASMv2 string datatype has the following mnemonics. Note that these string operations do not use the standard QIISSSRRR instruction format for arithmetic operations, instead using QII to represent sub-operations or a third register index.
+
+The string datatype has the following mnemonics. Note that these string operations do not obey the standard QIISSSRRR instruction format for arithmetic operations, instead using QII to represent sub-operations or a third register index.
 
 Code + QII		Mnemonic		Description
 111000			strcmp r s		set L, E, G flags based on strings at *r and *s
@@ -560,7 +618,7 @@ Code + QII		Mnemonic		Description
 000111							unused
 101ttt			behead r s t	write new string at *r consisting of *s without first t bytes
 
-Additionally, CHASMv2 defines synonyms for string-related operations:
+Additionally, the CHAS assembler recognizes certain synonyms for string-related operations:
 
 strlen r s := load		Get the length of string *s and store in register r
 setlen r s := store		Set the length of string *s to the value in register r
@@ -607,9 +665,9 @@ SSS value	Word Count
 80cr	1000 0000 1100 1rrr mod.wi r <literal>
 80dr	1000 0000 1101 0rrr mod.di r <literal>
 80er	1000 0000 1110 0rrr mod.i r <literal>
-81cr	1000 0001 1100 1rrr mod.wri r <address>
-81dr	1000 0001 1101 0rrr mod.dri r <address>
-81er	1000 0001 1110 0rrr mod.ri r <address>
+81cr	1000 0001 1100 1rrr mod.wri r <addr>
+81dr	1000 0001 1101 0rrr mod.dri r <addr>
+81er	1000 0001 1110 0rrr mod.ri r <addr>
 82sr	1000 0010 00ss srrr add.w r s
 82sr	1000 0010 01ss srrr add.d r s
 82sr	1000 0010 10ss srrr add r s
@@ -619,9 +677,9 @@ SSS value	Word Count
 82cr	1000 0010 1100 1rrr add.wi r <literal>
 82dr	1000 0010 1101 0rrr add.di r <literal>
 82er	1000 0010 1110 0rrr add.i r <literal>
-83cr	1000 0011 1100 1rrr add.wri r <address>
-83dr	1000 0011 1101 0rrr add.dri r <address>
-83er	1000 0011 1110 0rrr add.ri r <address>
+83cr	1000 0011 1100 1rrr add.wri r <addr>
+83dr	1000 0011 1101 0rrr add.dri r <addr>
+83er	1000 0011 1110 0rrr add.ri r <addr>
 84sr	1000 0100 00ss srrr lsh.w r s
 84sr	1000 0100 01ss srrr lsh.d r s
 84sr	1000 0100 10ss srrr lsh r s
@@ -631,9 +689,9 @@ SSS value	Word Count
 84cr	1000 0100 1100 1rrr lsh.wi r <literal>
 84dr	1000 0100 1101 0rrr lsh.di r <literal>
 84er	1000 0100 1110 0rrr lsh.i r <literal>
-85cr	1000 0101 1100 1rrr lsh.wri r <address>
-85dr	1000 0101 1101 0rrr lsh.dri r <address>
-85er	1000 0101 1110 0rrr lsh.ri r <address>
+85cr	1000 0101 1100 1rrr lsh.wri r <addr>
+85dr	1000 0101 1101 0rrr lsh.dri r <addr>
+85er	1000 0101 1110 0rrr lsh.ri r <addr>
 86sr	1000 0110 00ss srrr sub.w r s
 86sr	1000 0110 01ss srrr sub.d r s
 86sr	1000 0110 10ss srrr sub r s
@@ -643,9 +701,9 @@ SSS value	Word Count
 86cr	1000 0110 1100 1rrr sub.wi r <literal>
 86dr	1000 0110 1101 0rrr sub.di r <literal>
 86er	1000 0110 1110 0rrr sub.i r <literal>
-87cr	1000 0111 1100 1rrr sub.wri r <address>
-87dr	1000 0111 1101 0rrr sub.dri r <address>
-87er	1000 0111 1110 0rrr sub.ri r <address>
+87cr	1000 0111 1100 1rrr sub.wri r <addr>
+87dr	1000 0111 1101 0rrr sub.dri r <addr>
+87er	1000 0111 1110 0rrr sub.ri r <addr>
 88sr	1000 1000 00ss srrr mul.w r s
 88sr	1000 1000 01ss srrr mul.d r s
 88sr	1000 1000 10ss srrr mul r s
@@ -655,9 +713,9 @@ SSS value	Word Count
 88cr	1000 1000 1100 1rrr mul.wi r <literal>
 88dr	1000 1000 1101 0rrr mul.di r <literal>
 88er	1000 1000 1110 0rrr mul.i r <literal>
-89cr	1000 1001 1100 1rrr mul.wri r <address>
-89dr	1000 1001 1101 0rrr mul.dri r <address>
-89er	1000 1001 1110 0rrr mul.ri r <address>
+89cr	1000 1001 1100 1rrr mul.wri r <addr>
+89dr	1000 1001 1101 0rrr mul.dri r <addr>
+89er	1000 1001 1110 0rrr mul.ri r <addr>
 8asr	1000 1010 00ss srrr rsh.w r s
 8asr	1000 1010 01ss srrr rsh.d r s
 8asr	1000 1010 10ss srrr rsh r s
@@ -667,9 +725,9 @@ SSS value	Word Count
 8acr	1000 1010 1100 1rrr rsh.wi r <literal>
 8adr	1000 1010 1101 0rrr rsh.di r <literal>
 8aer	1000 1010 1110 0rrr rsh.i r <literal>
-8bcr	1000 1011 1100 1rrr rsh.wri r <address>
-8bdr	1000 1011 1101 0rrr rsh.dri r <address>
-8ber	1000 1011 1110 0rrr rsh.ri r <address>
+8bcr	1000 1011 1100 1rrr rsh.wri r <addr>
+8bdr	1000 1011 1101 0rrr rsh.dri r <addr>
+8ber	1000 1011 1110 0rrr rsh.ri r <addr>
 8csr	1000 1100 00ss srrr div.w r s
 8csr	1000 1100 01ss srrr div.d r s
 8csr	1000 1100 10ss srrr div r s
@@ -679,9 +737,9 @@ SSS value	Word Count
 8ccr	1000 1100 1100 1rrr div.wi r <literal>
 8cdr	1000 1100 1101 0rrr div.di r <literal>
 8cer	1000 1100 1110 0rrr div.i r <literal>
-8dcr	1000 1101 1100 1rrr div.wri r <address>
-8ddr	1000 1101 1101 0rrr div.dri r <address>
-8der	1000 1101 1110 0rrr div.ri r <address>
+8dcr	1000 1101 1100 1rrr div.wri r <addr>
+8ddr	1000 1101 1101 0rrr div.dri r <addr>
+8der	1000 1101 1110 0rrr div.ri r <addr>
 8esr	1000 1110 00ss srrr cmp.w r s
 8esr	1000 1110 01ss srrr cmp.d r s
 8esr	1000 1110 10ss srrr cmp r s
@@ -691,9 +749,9 @@ SSS value	Word Count
 8ecr	1000 1110 1100 1rrr cmp.wi r <literal>
 8edr	1000 1110 1101 0rrr cmp.di r <literal>
 8eer	1000 1110 1110 0rrr cmp.i r <literal>
-8fcr	1000 1111 1100 1rrr cmp.wri r <address>
-8fdr	1000 1111 1101 0rrr cmp.dri r <address>
-8fer	1000 1111 1110 0rrr cmp.ri r <address>
+8fcr	1000 1111 1100 1rrr cmp.wri r <addr>
+8fdr	1000 1111 1101 0rrr cmp.dri r <addr>
+8fer	1000 1111 1110 0rrr cmp.ri r <addr>
 
 90sr	1001 0000 00ss srrr smod.w r s
 90sr	1001 0000 01ss srrr smod.d r s
@@ -704,9 +762,9 @@ SSS value	Word Count
 90cr	1001 0000 1100 1rrr smod.wi r <literal>
 90dr	1001 0000 1101 0rrr smod.di r <literal>
 90er	1001 0000 1110 0rrr smod.i r <literal>
-91cr	1001 0001 1100 1rrr smod.wri r <address>
-91dr	1001 0001 1101 0rrr smod.dri r <address>
-91er	1001 0001 1110 0rrr smod.ri r <address>
+91cr	1001 0001 1100 1rrr smod.wri r <addr>
+91dr	1001 0001 1101 0rrr smod.dri r <addr>
+91er	1001 0001 1110 0rrr smod.ri r <addr>
 92sr	1001 0010 00ss srrr sadd.w r s
 92sr	1001 0010 01ss srrr sadd.d r s
 92sr	1001 0010 10ss srrr sadd r s
@@ -716,9 +774,9 @@ SSS value	Word Count
 92cr	1001 0010 1100 1rrr sadd.wi r <literal>
 92dr	1001 0010 1101 0rrr sadd.di r <literal>
 92er	1001 0010 1110 0rrr sadd.i r <literal>
-93cr	1001 0011 1100 1rrr sadd.wri r <address>
-93dr	1001 0011 1101 0rrr sadd.dri r <address>
-93er	1001 0011 1110 0rrr sadd.ri r <address>
+93cr	1001 0011 1100 1rrr sadd.wri r <addr>
+93dr	1001 0011 1101 0rrr sadd.dri r <addr>
+93er	1001 0011 1110 0rrr sadd.ri r <addr>
 94sr	1001 0100 00ss srrr slsh.w r s
 94sr	1001 0100 01ss srrr slsh.d r s
 94sr	1001 0100 10ss srrr slsh r s
@@ -728,9 +786,9 @@ SSS value	Word Count
 94cr	1001 0100 1100 1rrr slsh.wi r <literal>
 94dr	1001 0100 1101 0rrr slsh.di r <literal>
 94er	1001 0100 1110 0rrr slsh.i r <literal>
-95cr	1001 0101 1100 1rrr slsh.wri r <address>
-95dr	1001 0101 1101 0rrr slsh.dri r <address>
-95er	1001 0101 1110 0rrr slsh.ri r <address>
+95cr	1001 0101 1100 1rrr slsh.wri r <addr>
+95dr	1001 0101 1101 0rrr slsh.dri r <addr>
+95er	1001 0101 1110 0rrr slsh.ri r <addr>
 96sr	1001 0110 00ss srrr ssub.w r s
 96sr	1001 0110 01ss srrr ssub.d r s
 96sr	1001 0110 10ss srrr ssub r s
@@ -740,9 +798,9 @@ SSS value	Word Count
 96cr	1001 0110 1100 1rrr ssub.wi r <literal>
 96dr	1001 0110 1101 0rrr ssub.di r <literal>
 96er	1001 0110 1110 0rrr ssub.i r <literal>
-97cr	1001 0111 1100 1rrr ssub.wri r <address>
-97dr	1001 0111 1101 0rrr ssub.dri r <address>
-97er	1001 0111 1110 0rrr ssub.ri r <address>
+97cr	1001 0111 1100 1rrr ssub.wri r <addr>
+97dr	1001 0111 1101 0rrr ssub.dri r <addr>
+97er	1001 0111 1110 0rrr ssub.ri r <addr>
 98sr	1001 1000 00ss srrr smul.w r s
 98sr	1001 1000 01ss srrr smul.d r s
 98sr	1001 1000 10ss srrr smul r s
@@ -752,9 +810,9 @@ SSS value	Word Count
 98cr	1001 1000 1100 1rrr smul.wi r <literal>
 98dr	1001 1000 1101 0rrr smul.di r <literal>
 98er	1001 1000 1110 0rrr smul.i r <literal>
-99cr	1001 1001 1100 1rrr smul.wri r <address>
-99dr	1001 1001 1101 0rrr smul.dri r <address>
-99er	1001 1001 1110 0rrr smul.ri r <address>
+99cr	1001 1001 1100 1rrr smul.wri r <addr>
+99dr	1001 1001 1101 0rrr smul.dri r <addr>
+99er	1001 1001 1110 0rrr smul.ri r <addr>
 9asr	1001 1010 00ss srrr srsh.w r s
 9asr	1001 1010 01ss srrr srsh.d r s
 9asr	1001 1010 10ss srrr srsh r s
@@ -764,9 +822,9 @@ SSS value	Word Count
 9acr	1001 1010 1100 1rrr srsh.wi r <literal>
 9adr	1001 1010 1101 0rrr srsh.di r <literal>
 9aer	1001 1010 1110 0rrr srsh.i r <literal>
-9bcr	1001 1011 1100 1rrr srsh.wri r <address>
-9bdr	1001 1011 1101 0rrr srsh.dri r <address>
-9ber	1001 1011 1110 0rrr srsh.ri r <address>
+9bcr	1001 1011 1100 1rrr srsh.wri r <addr>
+9bdr	1001 1011 1101 0rrr srsh.dri r <addr>
+9ber	1001 1011 1110 0rrr srsh.ri r <addr>
 9csr	1001 1100 00ss srrr sdiv.w r s
 9csr	1001 1100 01ss srrr sdiv.d r s
 9csr	1001 1100 10ss srrr sdiv r s
@@ -776,9 +834,9 @@ SSS value	Word Count
 9ccr	1001 1100 1100 1rrr sdiv.wi r <literal>
 9cdr	1001 1100 1101 0rrr sdiv.di r <literal>
 9cer	1001 1100 1110 0rrr sdiv.i r <literal>
-9dcr	1001 1101 1100 1rrr sdiv.wri r <address>
-9ddr	1001 1101 1101 0rrr sdiv.dri r <address>
-9der	1001 1101 1110 0rrr sdiv.ri r <address>
+9dcr	1001 1101 1100 1rrr sdiv.wri r <addr>
+9ddr	1001 1101 1101 0rrr sdiv.dri r <addr>
+9der	1001 1101 1110 0rrr sdiv.ri r <addr>
 9esr	1001 1110 00ss srrr scmp.w r s
 9esr	1001 1110 01ss srrr scmp.d r s
 9esr	1001 1110 10ss srrr scmp r s
@@ -788,9 +846,9 @@ SSS value	Word Count
 9ecr	1001 1110 1100 1rrr scmp.wi r <literal>
 9edr	1001 1110 1101 0rrr scmp.di r <literal>
 9eer	1001 1110 1110 0rrr scmp.i r <literal>
-9fcr	1001 1111 1100 1rrr scmp.wri r <address>
-9fdr	1001 1111 1101 0rrr scmp.dri r <address>
-9fer	1001 1111 1110 0rrr scmp.ri r <address>
+9fcr	1001 1111 1100 1rrr scmp.wri r <addr>
+9fdr	1001 1111 1101 0rrr scmp.dri r <addr>
+9fer	1001 1111 1110 0rrr scmp.ri r <addr>
 
 a0sr	1010 0000 00ss srrr bmod.w r s
 a0sr	1010 0000 01ss srrr bmod.d r s
@@ -801,9 +859,9 @@ a1sr	1010 0001 10ss srrr bmod.r r s
 a0cr	1010 0000 1100 1rrr bmod.wi r <literal>
 a0dr	1010 0000 1101 0rrr bmod.di r <literal>
 a0er	1010 0000 1110 0rrr bmod.i r <literal>
-a1cr	1010 0001 1100 1rrr bmod.wri r <address>
-a1dr	1010 0001 1101 0rrr bmod.dri r <address>
-a1er	1010 0001 1110 0rrr bmod.ri r <address>
+a1cr	1010 0001 1100 1rrr bmod.wri r <addr>
+a1dr	1010 0001 1101 0rrr bmod.dri r <addr>
+a1er	1010 0001 1110 0rrr bmod.ri r <addr>
 a2sr	1010 0010 00ss srrr badd.w r s
 a2sr	1010 0010 01ss srrr badd.d r s
 a2sr	1010 0010 10ss srrr badd r s
@@ -813,9 +871,9 @@ a3sr	1010 0011 10ss srrr badd.r r s
 a2cr	1010 0010 1100 1rrr badd.wi r <literal>
 a2dr	1010 0010 1101 0rrr badd.di r <literal>
 a2er	1010 0010 1110 0rrr badd.i r <literal>
-a3cr	1010 0011 1100 1rrr badd.wri r <address>
-a3dr	1010 0011 1101 0rrr badd.dri r <address>
-a3er	1010 0011 1110 0rrr badd.ri r <address>
+a3cr	1010 0011 1100 1rrr badd.wri r <addr>
+a3dr	1010 0011 1101 0rrr badd.dri r <addr>
+a3er	1010 0011 1110 0rrr badd.ri r <addr>
 a6sr	1010 0110 00ss srrr bsub.w r s
 a6sr	1010 0110 01ss srrr bsub.d r s
 a6sr	1010 0110 10ss srrr bsub r s
@@ -825,9 +883,9 @@ a7sr	1010 0111 10ss srrr bsub.r r s
 a6cr	1010 0110 1100 1rrr bsub.wi r <literal>
 a6dr	1010 0110 1101 0rrr bsub.di r <literal>
 a6er	1010 0110 1110 0rrr bsub.i r <literal>
-a7cr	1010 0111 1100 1rrr bsub.wri r <address>
-a7dr	1010 0111 1101 0rrr bsub.dri r <address>
-a7er	1010 0111 1110 0rrr bsub.ri r <address>
+a7cr	1010 0111 1100 1rrr bsub.wri r <addr>
+a7dr	1010 0111 1101 0rrr bsub.dri r <addr>
+a7er	1010 0111 1110 0rrr bsub.ri r <addr>
 a8sr	1010 1000 00ss srrr bmul.w r s
 a8sr	1010 1000 01ss srrr bmul.d r s
 a8sr	1010 1000 10ss srrr bmul r s
@@ -837,9 +895,9 @@ a9sr	1010 1001 10ss srrr bmul.r r s
 a8cr	1010 1000 1100 1rrr bmul.wi r <literal>
 a8dr	1010 1000 1101 0rrr bmul.di r <literal>
 a8er	1010 1000 1110 0rrr bmul.i r <literal>
-a9cr	1010 1001 1100 1rrr bmul.wri r <address>
-a9dr	1010 1001 1101 0rrr bmul.dri r <address>
-a9er	1010 1001 1110 0rrr bmul.ri r <address>
+a9cr	1010 1001 1100 1rrr bmul.wri r <addr>
+a9dr	1010 1001 1101 0rrr bmul.dri r <addr>
+a9er	1010 1001 1110 0rrr bmul.ri r <addr>
 acsr	1010 1100 00ss srrr bdiv.w r s
 acsr	1010 1100 01ss srrr bdiv.d r s
 acsr	1010 1100 10ss srrr bdiv r s
@@ -849,9 +907,9 @@ adsr	1010 1101 10ss srrr bdiv.r r s
 accr	1010 1100 1100 1rrr bdiv.wi r <literal>
 acdr	1010 1100 1101 0rrr bdiv.di r <literal>
 acer	1010 1100 1110 0rrr bdiv.i r <literal>
-adcr	1010 1101 1100 1rrr bdiv.wri r <address>
-addr	1010 1101 1101 0rrr bdiv.dri r <address>
-ader	1010 1101 1110 0rrr bdiv.ri r <address>
+adcr	1010 1101 1100 1rrr bdiv.wri r <addr>
+addr	1010 1101 1101 0rrr bdiv.dri r <addr>
+ader	1010 1101 1110 0rrr bdiv.ri r <addr>
 
 b2sr	1011 0010 00ss srrr fadd.w r s
 b2sr	1011 0010 01ss srrr fadd.d r s
@@ -862,9 +920,9 @@ b3sr	1011 0011 10ss srrr fadd.r r s
 b2cr	1011 0010 1100 1rrr fadd.wi r <literal>
 b2dr	1011 0010 1101 0rrr fadd.di r <literal>
 b2er	1011 0010 1110 0rrr fadd.i r <literal>
-b3cr	1011 0011 1100 1rrr fadd.wri r <address>
-b3dr	1011 0011 1101 0rrr fadd.dri r <address>
-b3er	1011 0011 1110 0rrr fadd.ri r <address>
+b3cr	1011 0011 1100 1rrr fadd.wri r <addr>
+b3dr	1011 0011 1101 0rrr fadd.dri r <addr>
+b3er	1011 0011 1110 0rrr fadd.ri r <addr>
 b4sr	1011 0100 00ss srrr fpow.w r s
 b4sr	1011 0100 01ss srrr fpow.d r s
 b4sr	1011 0100 10ss srrr fpow r s
@@ -874,9 +932,9 @@ b5sr	1011 0101 10ss srrr fpow.r r s
 b4cr	1011 0100 1100 1rrr fpow.wi r <literal>
 b4dr	1011 0100 1101 0rrr fpow.di r <literal>
 b4er	1011 0100 1110 0rrr fpow.i r <literal>
-b5cr	1011 0101 1100 1rrr fpow.wri r <address>
-b5dr	1011 0101 1101 0rrr fpow.dri r <address>
-b5er	1011 0101 1110 0rrr fpow.ri r <address>
+b5cr	1011 0101 1100 1rrr fpow.wri r <addr>
+b5dr	1011 0101 1101 0rrr fpow.dri r <addr>
+b5er	1011 0101 1110 0rrr fpow.ri r <addr>
 b6sr	1011 0110 00ss srrr fsub.w r s
 b6sr	1011 0110 01ss srrr fsub.d r s
 b6sr	1011 0110 10ss srrr fsub r s
@@ -886,9 +944,9 @@ b7sr	1011 0111 10ss srrr fsub.r r s
 b6cr	1011 0110 1100 1rrr fsub.wi r <literal>
 b6dr	1011 0110 1101 0rrr fsub.di r <literal>
 b6er	1011 0110 1110 0rrr fsub.i r <literal>
-b7cr	1011 0111 1100 1rrr fsub.wri r <address>
-b7dr	1011 0111 1101 0rrr fsub.dri r <address>
-b7er	1011 0111 1110 0rrr fsub.ri r <address>
+b7cr	1011 0111 1100 1rrr fsub.wri r <addr>
+b7dr	1011 0111 1101 0rrr fsub.dri r <addr>
+b7er	1011 0111 1110 0rrr fsub.ri r <addr>
 b8sr	1011 1000 00ss srrr fmul.w r s
 b8sr	1011 1000 01ss srrr fmul.d r s
 b8sr	1011 1000 10ss srrr fmul r s
@@ -898,9 +956,9 @@ b9sr	1011 1001 10ss srrr fmul.r r s
 b8cr	1011 1000 1100 1rrr fmul.wi r <literal>
 b8dr	1011 1000 1101 0rrr fmul.di r <literal>
 b8er	1011 1000 1110 0rrr fmul.i r <literal>
-b9cr	1011 1001 1100 1rrr fmul.wri r <address>
-b9dr	1011 1001 1101 0rrr fmul.dri r <address>
-b9er	1011 1001 1110 0rrr fmul.ri r <address>
+b9cr	1011 1001 1100 1rrr fmul.wri r <addr>
+b9dr	1011 1001 1101 0rrr fmul.dri r <addr>
+b9er	1011 1001 1110 0rrr fmul.ri r <addr>
 basr	1011 1010 00ss srrr flog.w r s
 basr	1011 1010 01ss srrr flog.d r s
 basr	1011 1010 10ss srrr flog r s
@@ -910,9 +968,9 @@ bbsr	1011 1011 10ss srrr flog.r r s
 bacr	1011 1010 1100 1rrr flog.wi r <literal>
 badr	1011 1010 1101 0rrr flog.di r <literal>
 baer	1011 1010 1110 0rrr flog.i r <literal>
-bbcr	1011 1011 1100 1rrr flog.wri r <address>
-bbdr	1011 1011 1101 0rrr flog.dri r <address>
-bber	1011 1011 1110 0rrr flog.ri r <address>
+bbcr	1011 1011 1100 1rrr flog.wri r <addr>
+bbdr	1011 1011 1101 0rrr flog.dri r <addr>
+bber	1011 1011 1110 0rrr flog.ri r <addr>
 bcsr	1011 1100 00ss srrr fdiv.w r s
 bcsr	1011 1100 01ss srrr fdiv.d r s
 bcsr	1011 1100 10ss srrr fdiv r s
@@ -922,9 +980,9 @@ bdsr	1011 1101 10ss srrr fdiv.r r s
 bccr	1011 1100 1100 1rrr fdiv.wi r <literal>
 bcdr	1011 1100 1101 0rrr fdiv.di r <literal>
 bcer	1011 1100 1110 0rrr fdiv.i r <literal>
-bdcr	1011 1101 1100 1rrr fdiv.wri r <address>
-bddr	1011 1101 1101 0rrr fdiv.dri r <address>
-bder	1011 1101 1110 0rrr fdiv.ri r <address>
+bdcr	1011 1101 1100 1rrr fdiv.wri r <addr>
+bddr	1011 1101 1101 0rrr fdiv.dri r <addr>
+bder	1011 1101 1110 0rrr fdiv.ri r <addr>
 besr	1011 1110 00ss srrr fcmp.w r s
 besr	1011 1110 01ss srrr fcmp.d r s
 besr	1011 1110 10ss srrr fcmp r s
@@ -934,9 +992,9 @@ bfsr	1011 1111 10ss srrr fcmp.r r s
 becr	1011 1110 1100 1rrr fcmp.wi r <literal>
 bedr	1011 1110 1101 0rrr fcmp.di r <literal>
 beer	1011 1110 1110 0rrr fcmp.i r <literal>
-bfcr	1011 1111 1100 1rrr fcmp.wri r <address>
-bfdr	1011 1111 1101 0rrr fcmp.dri r <address>
-bfer	1011 1111 1110 0rrr fcmp.ri r <address>
+bfcr	1011 1111 1100 1rrr fcmp.wri r <addr>
+bfdr	1011 1111 1101 0rrr fcmp.dri r <addr>
+bfer	1011 1111 1110 0rrr fcmp.ri r <addr>
 
 c0sr	1100 0000 00ss srrr not.w r s
 c0sr	1100 0000 01ss srrr not.d r s
@@ -947,9 +1005,9 @@ c1sr	1100 0001 10ss srrr not.r r s
 c0cr	1100 0000 1100 1rrr not.wi r <literal>
 c0dr	1100 0000 1101 0rrr not.di r <literal>
 c0er	1100 0000 1110 0rrr not.i r <literal>
-c1cr	1100 0001 1100 1rrr not.wri r <address>
-c1dr	1100 0001 1101 0rrr not.dri r <address>
-c1er	1100 0001 1110 0rrr not.ri r <address>
+c1cr	1100 0001 1100 1rrr not.wri r <addr>
+c1dr	1100 0001 1101 0rrr not.dri r <addr>
+c1er	1100 0001 1110 0rrr not.ri r <addr>
 c2sr	1100 0010 00ss srrr xor.w r s
 c2sr	1100 0010 01ss srrr xor.d r s
 c2sr	1100 0010 10ss srrr xor r s
@@ -959,9 +1017,9 @@ c3sr	1100 0011 10ss srrr xor.r r s
 c2cr	1100 0010 1100 1rrr xor.wi r <literal>
 c2dr	1100 0010 1101 0rrr xor.di r <literal>
 c2er	1100 0010 1110 0rrr xor.i r <literal>
-c3cr	1100 0011 1100 1rrr xor.wri r <address>
-c3dr	1100 0011 1101 0rrr xor.dri r <address>
-c3er	1100 0011 1110 0rrr xor.ri r <address>
+c3cr	1100 0011 1100 1rrr xor.wri r <addr>
+c3dr	1100 0011 1101 0rrr xor.dri r <addr>
+c3er	1100 0011 1110 0rrr xor.ri r <addr>
 c6sr	1100 0110 00ss srrr ror.w r s
 c6sr	1100 0110 01ss srrr ror.d r s
 c6sr	1100 0110 10ss srrr ror r s
@@ -971,9 +1029,9 @@ c7sr	1100 0111 10ss srrr ror.r r s
 c6cr	1100 0110 1100 1rrr ror.wi r <literal>
 c6dr	1100 0110 1101 0rrr ror.di r <literal>
 c6er	1100 0110 1110 0rrr ror.i r <literal>
-c7cr	1100 0111 1100 1rrr ror.wri r <address>
-c7dr	1100 0111 1101 0rrr ror.dri r <address>
-c7er	1100 0111 1110 0rrr ror.ri r <address>
+c7cr	1100 0111 1100 1rrr ror.wri r <addr>
+c7dr	1100 0111 1101 0rrr ror.dri r <addr>
+c7er	1100 0111 1110 0rrr ror.ri r <addr>
 c8sr	1100 1000 00ss srrr and.w r s
 c8sr	1100 1000 01ss srrr and.d r s
 c8sr	1100 1000 10ss srrr and r s
@@ -983,9 +1041,9 @@ c9sr	1100 1001 10ss srrr and.r r s
 c8cr	1100 1000 1100 1rrr and.wi r <literal>
 c8dr	1100 1000 1101 0rrr and.di r <literal>
 c8er	1100 1000 1110 0rrr and.i r <literal>
-c9cr	1100 1001 1100 1rrr and.wri r <address>
-c9dr	1100 1001 1101 0rrr and.dri r <address>
-c9er	1100 1001 1110 0rrr and.ri r <address>
+c9cr	1100 1001 1100 1rrr and.wri r <addr>
+c9dr	1100 1001 1101 0rrr and.dri r <addr>
+c9er	1100 1001 1110 0rrr and.ri r <addr>
 casr	1100 1010 00ss srrr or.w r s
 casr	1100 1010 01ss srrr or.d r s
 casr	1100 1010 10ss srrr or r s
@@ -995,9 +1053,9 @@ cbsr	1100 1011 10ss srrr or.r r s
 cacr	1100 1010 1100 1rrr or.wi r <literal>
 cadr	1100 1010 1101 0rrr or.di r <literal>
 caer	1100 1010 1110 0rrr or.i r <literal>
-cbcr	1100 1011 1100 1rrr or.wri r <address>
-cbdr	1100 1011 1101 0rrr or.dri r <address>
-cber	1100 1011 1110 0rrr or.ri r <address>
+cbcr	1100 1011 1100 1rrr or.wri r <addr>
+cbdr	1100 1011 1101 0rrr or.dri r <addr>
+cber	1100 1011 1110 0rrr or.ri r <addr>
 ccsr	1100 1100 00ss srrr rol.w r s
 ccsr	1100 1100 01ss srrr rol.d r s
 ccsr	1100 1100 10ss srrr rol r s
@@ -1007,9 +1065,9 @@ cdsr	1100 1101 10ss srrr rol.r r s
 cccr	1100 1100 1100 1rrr rol.wi r <literal>
 ccdr	1100 1100 1101 0rrr rol.di r <literal>
 ccer	1100 1100 1110 0rrr rol.i r <literal>
-cdcr	1100 1101 1100 1rrr rol.wri r <address>
-cddr	1100 1101 1101 0rrr rol.dri r <address>
-cder	1100 1101 1110 0rrr rol.ri r <address>
+cdcr	1100 1101 1100 1rrr rol.wri r <addr>
+cddr	1100 1101 1101 0rrr rol.dri r <addr>
+cder	1100 1101 1110 0rrr rol.ri r <addr>
 cesr	1100 1110 00ss srrr popcount.w r s
 cesr	1100 1110 01ss srrr popcount.d r s
 cesr	1100 1110 10ss srrr popcount r s
@@ -1019,9 +1077,9 @@ cfsr	1100 1111 10ss srrr popcount.r r s
 cecr	1100 1110 1100 1rrr popcount.wi r <literal>
 cedr	1100 1110 1101 0rrr popcount.di r <literal>
 ceer	1100 1110 1110 0rrr popcount.i r <literal>
-cfcr	1100 1111 1100 1rrr popcount.wri r <address>
-cfdr	1100 1111 1101 0rrr popcount.dri r <address>
-cfer	1100 1111 1110 0rrr popcount.ri r <address>
+cfcr	1100 1111 1100 1rrr popcount.wri r <addr>
+cfdr	1100 1111 1101 0rrr popcount.dri r <addr>
+cfer	1100 1111 1110 0rrr popcount.ri r <addr>
 
 d2sr	1101 0010 00ss srrr cadd.w r s
 d2sr	1101 0010 01ss srrr cadd.d r s
@@ -1032,9 +1090,9 @@ d3sr	1101 0011 10ss srrr cadd.r r s
 d2cr	1101 0010 1100 1rrr cadd.wi r <literal>
 d2dr	1101 0010 1101 0rrr cadd.di r <literal>
 d2er	1101 0010 1110 0rrr cadd.i r <literal>
-d3cr	1101 0011 1100 1rrr cadd.wri r <address>
-d3dr	1101 0011 1101 0rrr cadd.dri r <address>
-d3er	1101 0011 1110 0rrr cadd.ri r <address>
+d3cr	1101 0011 1100 1rrr cadd.wri r <addr>
+d3dr	1101 0011 1101 0rrr cadd.dri r <addr>
+d3er	1101 0011 1110 0rrr cadd.ri r <addr>
 d4sr	1101 0100 00ss srrr clsh.w r s
 d4sr	1101 0100 01ss srrr clsh.d r s
 d4sr	1101 0100 10ss srrr clsh r s
@@ -1044,9 +1102,9 @@ d5sr	1101 0101 10ss srrr clsh.r r s
 d4cr	1101 0100 1100 1rrr clsh.wi r <literal>
 d4dr	1101 0100 1101 0rrr clsh.di r <literal>
 d4er	1101 0100 1110 0rrr clsh.i r <literal>
-d5cr	1101 0101 1100 1rrr clsh.wri r <address>
-d5dr	1101 0101 1101 0rrr clsh.dri r <address>
-d5er	1101 0101 1110 0rrr clsh.ri r <address>
+d5cr	1101 0101 1100 1rrr clsh.wri r <addr>
+d5dr	1101 0101 1101 0rrr clsh.dri r <addr>
+d5er	1101 0101 1110 0rrr clsh.ri r <addr>
 d6sr	1101 0110 00ss srrr csub.w r s
 d6sr	1101 0110 01ss srrr csub.d r s
 d6sr	1101 0110 10ss srrr csub r s
@@ -1056,9 +1114,9 @@ d7sr	1101 0111 10ss srrr csub.r r s
 d6cr	1101 0110 1100 1rrr csub.wi r <literal>
 d6dr	1101 0110 1101 0rrr csub.di r <literal>
 d6er	1101 0110 1110 0rrr csub.i r <literal>
-d7cr	1101 0111 1100 1rrr csub.wri r <address>
-d7dr	1101 0111 1101 0rrr csub.dri r <address>
-d7er	1101 0111 1110 0rrr csub.ri r <address>
+d7cr	1101 0111 1100 1rrr csub.wri r <addr>
+d7dr	1101 0111 1101 0rrr csub.dri r <addr>
+d7er	1101 0111 1110 0rrr csub.ri r <addr>
 d8sr	1101 1000 00ss srrr cmul.w r s
 d8sr	1101 1000 01ss srrr cmul.d r s
 d8sr	1101 1000 10ss srrr cmul r s
@@ -1068,9 +1126,9 @@ d9sr	1101 1001 10ss srrr cmul.r r s
 d8cr	1101 1000 1100 1rrr cmul.wi r <literal>
 d8dr	1101 1000 1101 0rrr cmul.di r <literal>
 d8er	1101 1000 1110 0rrr cmul.i r <literal>
-d9cr	1101 1001 1100 1rrr cmul.wri r <address>
-d9dr	1101 1001 1101 0rrr cmul.dri r <address>
-d9er	1101 1001 1110 0rrr cmul.ri r <address>
+d9cr	1101 1001 1100 1rrr cmul.wri r <addr>
+d9dr	1101 1001 1101 0rrr cmul.dri r <addr>
+d9er	1101 1001 1110 0rrr cmul.ri r <addr>
 dasr	1101 1010 00ss srrr crsh.w r s
 dasr	1101 1010 01ss srrr crsh.d r s
 dasr	1101 1010 10ss srrr crsh r s
@@ -1080,9 +1138,9 @@ dbsr	1101 1011 10ss srrr crsh.r r s
 dacr	1101 1010 1100 1rrr crsh.wi r <literal>
 dadr	1101 1010 1101 0rrr crsh.di r <literal>
 daer	1101 1010 1110 0rrr crsh.i r <literal>
-dbcr	1101 1011 1100 1rrr crsh.wri r <address>
-dbdr	1101 1011 1101 0rrr crsh.dri r <address>
-dber	1101 1011 1110 0rrr crsh.ri r <address>
+dbcr	1101 1011 1100 1rrr crsh.wri r <addr>
+dbdr	1101 1011 1101 0rrr crsh.dri r <addr>
+dber	1101 1011 1110 0rrr crsh.ri r <addr>
 dcsr	1101 1100 00ss srrr cdiv.w r s
 dcsr	1101 1100 01ss srrr cdiv.d r s
 dcsr	1101 1100 10ss srrr cdiv r s
@@ -1092,9 +1150,9 @@ ddsr	1101 1101 10ss srrr cdiv.r r s
 dccr	1101 1100 1100 1rrr cdiv.wi r <literal>
 dcdr	1101 1100 1101 0rrr cdiv.di r <literal>
 dcer	1101 1100 1110 0rrr cdiv.i r <literal>
-ddcr	1101 1101 1100 1rrr cdiv.wri r <address>
-dddr	1101 1101 1101 0rrr cdiv.dri r <address>
-dder	1101 1101 1110 0rrr cdiv.ri r <address>
+ddcr	1101 1101 1100 1rrr cdiv.wri r <addr>
+dddr	1101 1101 1101 0rrr cdiv.dri r <addr>
+dder	1101 1101 1110 0rrr cdiv.ri r <addr>
 desr	1101 1110 00ss srrr ccmp.w r s
 desr	1101 1110 01ss srrr ccmp.d r s
 desr	1101 1110 10ss srrr ccmp r s
@@ -1104,9 +1162,9 @@ dfsr	1101 1111 10ss srrr ccmp.r r s
 decr	1101 1110 1100 1rrr ccmp.wi r <literal>
 dedr	1101 1110 1101 0rrr ccmp.di r <literal>
 deer	1101 1110 1110 0rrr ccmp.i r <literal>
-dfcr	1101 1111 1100 1rrr ccmp.wri r <address>
-dfdr	1101 1111 1101 0rrr ccmp.dri r <address>
-dfer	1101 1111 1110 0rrr ccmp.ri r <address>
+dfcr	1101 1111 1100 1rrr ccmp.wri r <addr>
+dfdr	1101 1111 1101 0rrr ccmp.dri r <addr>
+dfer	1101 1111 1110 0rrr ccmp.ri r <addr>
 d0sr	1101 0000 00ss srrr ccmp.we r s
 d0sr	1101 0000 01ss srrr ccmp.de r s
 d0sr	1101 0000 10ss srrr ccmp.e r s
@@ -1163,27 +1221,26 @@ Other values for ........ are possible but have no defined mnemonics.
 
 The repeat family instructions cause the last instruction to be executed multiple times. The CPU uses hardware to perform these loops; they are not assembler directives. Literal values cannot be incremented; they must be in registers.
 
-180R	0001 1000 0000 RRRR	rep.n R				repeat previous instruction R times
-181R	0001 1000 0001 RRRR	rep.wr R			repeat R times, incrementing contents of 'r' register by 1
-182R	0001 1000 0010 RRRR	rep.ws R			repeat R times, incrementing contents of 's' register by 1
-183R	0001 1000 0011 RRRR	rep.wrs R			repeat R times, incrementing contents of 'r' and 's' registers by 1
-185R	0001 1000 0101 RRRR	rep.dr R			repeat R times, incrementing contents of 'r' register by 2
-186R	0001 1000 0110 RRRR	rep.ds R			repeat R times, incrementing contents of 's' register by 2
-187R	0001 1000 0111 RRRR	rep.drs R			repeat R times, incrementing contents of 'r' and 's' registers by 2
-189R	0001 1000 1001 RRRR	rep.qr R			repeat R times, incrementing contents of 'r' register by 4
-18aR	0001 1000 1010 RRRR	rep.qs R			repeat R times, incrementing contents of 's' register by 4
-18bR	0001 1000 1011 RRRR	rep.qrs R			repeat R times, incrementing contents of 'r' and 's' registers by 4
+180R	0001 1000 0000 RRRR	rep.n R				repeat previous instruction R times #NEW#
+181R	0001 1000 0001 RRRR	rep.wr R			repeat R times, incrementing contents of 'r' register by 1 #NEW#
+182R	0001 1000 0010 RRRR	rep.ws R			repeat R times, incrementing contents of 's' register by 1 #NEW#
+183R	0001 1000 0011 RRRR	rep.wrs R			repeat R times, incrementing contents of 'r' and 's' registers by 1 #NEW#
+185R	0001 1000 0101 RRRR	rep.dr R			repeat R times, incrementing contents of 'r' register by 2 #NEW#
+186R	0001 1000 0110 RRRR	rep.ds R			repeat R times, incrementing contents of 's' register by 2 #NEW#
+187R	0001 1000 0111 RRRR	rep.drs R			repeat R times, incrementing contents of 'r' and 's' registers by 2 #NEW#
+189R	0001 1000 1001 RRRR	rep.qr R			repeat R times, incrementing contents of 'r' register by 4 #NEW#
+18aR	0001 1000 1010 RRRR	rep.qs R			repeat R times, incrementing contents of 's' register by 4 #NEW#
+18bR	0001 1000 1011 RRRR	rep.qrs R			repeat R times, incrementing contents of 'r' and 's' registers by 4 #NEW#
 
 
 3.4. Special Flow Control Operations
 ------------------------------------
 
-f0vv	1111 0000 bbbb bbbb	int b				call interrupt x (see 5.)
+f0vv	1111 0000 bbbb bbbb	int b				call interrupt b (see 5.)
 												if b is 0, halt entire system (all CPUs)
 												if b is 255, call any pending interrupts 
 f401	1111 0100 0000 0001	iret				return from interrupt
 												restore M flag (according to IAT entry for CI, see 5.) and jump to ra
-
 f41R	1111 0100 0001 RRRR lmmt R				load MMR from register R or trailer address (see 6.)
 												MMT is not active until the M flag is set
 												if the loaded address is 0 (null), the M flag is automatically disabled
@@ -1192,25 +1249,29 @@ f400	1111 0100 0000 0000	ret					pop pc, sb, sp (jump back to old pc)
 f80R	1111 1000 0000 RRRR	call R				push sp, sb, pc, set sb to sp, and jump to address in register R
 f80f	1111 1000 0000 1111	call q				push sp, sb, pc, set sb to sp, and jump to address literal q
 
-f1**	1111 0001 **** ****						unused
+f1vv	1111 0001 vvvv vvvv	syscall b			as `int b`, but with RM2 flag set (see 5.) - interrupt is expected to return values
+
 f2**	1111 0010 **** ****						unused
 f3**	1111 0011 **** ****						unused
 f5**	1111 0101 **** ****						unused
 f6**	1111 0110 **** ****						unused
 f7**	1111 0111 **** ****						unused
-f9**	1111 1001 **** ****						unused
-fa**	1111 1010 **** ****						unused
-fb**	1111 1011 **** ****						unused
+
+f9sr	1111 1001 ssss rrrr	load.wia r s q		load word with immediate adjust: r <- mem[s + q] #NEW#
+fasr	1111 1010 ssss rrrr	load.dia r s q		load dword with immediate adjust: r <- mem[s + q] #NEW#
+fbsr	1111 1011 ssss rrrr	load.ia r s q		load qword with immediate adjust: r <- mem[s + q] #NEW#
+
 fc**	1111 1100 **** ****						unused
-fd**	1111 1101 **** ****						unused
-fe**	1111 1110 **** ****						unused
-ff**	1111 1111 **** ****						unused
+
+fdsr	1111 1101 ssss rrrr	store.wia r s q		store word with immediate adjust: mem[s + q] <- r #NEW#
+fesr	1111 1110 ssss rrrr	store.dia r s q		store dword with immediate adjust: mem[s + q] <- r #NEW#
+ffsr	1111 1111 ssss rrrr	store.ia r s q		store qword with immediate adjust: mem[s + q] <- r #NEW#
 
 
 3.5. Debug Instructions
 -----------------------
 
-Debug instructions start with the bits 00101.
+Debug instructions start with the bits 001010.
 
 28vv	0010 1000 bbbb bbbb cout b				Print b to debug terminal
 290r	0010 1001 0000 rrrr creg r				Print register r to debug terminal (decimal)
@@ -1284,8 +1345,8 @@ CHASM addresses indicate the locations of 16-bit values in memory. Programs can 
 To the kernel, CHASM has four layers of memory:
 
 1. "Real memory" refers to the actual contents of the system's RAM. Running programs cannot view or manipulate real memory directly; they may only see flat memory.
-2. "Flat memory" refers to the memory layout after devices have been added. Device addresses are defined by the DMT (see 8.)
-3. "Dynamic memory" or "mapped" refers to the memory layout after the Memory Map Table (MMT) has been applied. In a timesharing operating system, each process has its own MMT, which lays out a view of memory that contains only what the application needs to see. Along with a good set of interrupt masks and judicious use of ring numbers, this completely sandboxes user applications.
+2. "Flat memory" refers to the memory layout after devices have been added. Each device is assigned a memory range, or bank, from 0x##0000000000 to 0x##ffffffffff, where ## is the device number. (See 4.2.) The top 16 bits of flat memory addresses are reserved for reference tagging by software.
+3. "Dynamic memory" or "mapped" refers to the memory layout after the Memory Map Table (MMT) has been applied. In a timesharing operating system, each process has its own MMT, which lays out a view of memory that contains only what the application needs to see. This sandboxes user applications from directly making improper memory accesses.
 
 While the M flag is set, memory mapping is enabled. The 'lmmt' instruction must be used beforehand to indicate a valid Memory Map Table (MMT). While memory mapping is enabled, the available memory is determined according to the particulars of the memory map, described in section 6.
 
@@ -1302,11 +1363,9 @@ The following addresses in flat memory are reserved. Each address indicates the 
 	0x 0000 0000 0000 0fff - end of unused int 255 entry
 	0x 0000 0000 0000 1000 - start of DMT (256 x 16 words = 8192 bytes) - see 8. DEVICE MANAGEMENT TABLE
 	0x 0000 0000 0000 2fff - end of device management table
-	0x 0000 0000 0000 3000 - start of resident firmware (0x1e000 words, 245760 bytes)
-	0x 0000 0000 0001 ffff - end of resident firmware
-	0x 0000 0000 0002 0000 - beginning of bootloader code
+	0x 0000 0000 0000 3000 - beginning of bootloader code as loaded from disk by firmware
 
-When the computer initializes, execution begins at 0x0. This is initialized to contain the null jump guard, which is a `jmp 0x3000` instruction that moves execution to the start of the firmware. The RAM shadowed by the firmware is inaccessible unless the firmware is unloaded.
+When the computer initializes, execution begins at 0x0. This is initialized to contain the null jump guard, which is a `jmp 0x020000000000` instruction that moves execution to the start of the firmware; see next section.
 
 
 4.2. Memory Banks
@@ -1318,9 +1377,9 @@ Physical memory addresses have the format:
 
 	0x 0000 rrss ssss ssss
 
-where rr is the bank number (00-ff) and ssssssssss is the address within the bank. The top 16 bits are reserved for tagging pointers for software use.
+where rr is the bank number (00-ff) and ssssssssss is the address within the bank. The top 16 bits are reserved for reference tagging by software.
 
-Since most devices do not map memory, and very rarely will a device use all 2 TB of its budgeted window, most memory addresses are invalid.
+Since most devices do not map memory, and very rarely will a device allocate all 2 TB of its budgeted window, most memory addresses are invalid.
 
 In a typical configuration:
 
@@ -1328,6 +1387,15 @@ In a typical configuration:
 	bank 01 = primary CPU register list
 	bank 02 = RADIX ROM
 	bank 06 = video memory
+
+Thus:
+
+	0x 0000 0000 0000 0000 - start of system memory
+	0x 0000 00ff ffff ffff - end of system memory
+	0x 0000 0100 0000 0000 - CPU0 registers
+	0x 0000 0200 0000 0000 - start of resident firmware
+	0x 0000 02ff ffff ffff - end of resident firmware
+	0x 0000 0600 0000 0000 - start of ATHARTI graphics memory
 
 
 
@@ -1532,16 +1600,16 @@ When the interrupt fires, the CHASM CPU detects that the M flag is off, but that
 	load pc IA			;interrupt address (see 5.)
 	copy ra sp			;back up stack pointer
 	lmmt IMMT			;interrupt MMT address (see 5.)
-	enable status 0x0b	;enable M (memory mapping)
-	disable status 0x18	;disable RM0
-	disable status 0x19	;disable RM1
+	enable status 0x23	;enable M (memory mapping)
+	disable status 0x30	;disable RM0
+	disable status 0x31	;disable RM1
 
 When the IRET instruction occurs, the CPU notices that the M flag is enabled and checks RM0 and RM1. To recognize a Type B IRET, both RM0 and RM1 must be 0.
 
 The IRET then does the following:
 
 	lmmt 0				;clear MMR
-	disable status 0x0b	;clear M
+	disable status 0x23	;clear M
 	copy sp ra			;restore stack pointer
 	popa				;restore all registers
 
@@ -1554,12 +1622,12 @@ When the interrupt fires, the CHASM CPU does the following:
 
 	pusha
 	copy ra sp			;back up stack pointer
-	disable status 0x0b	;disable M (memory mapping)
+	disable status 0x23	;disable M (memory mapping)
 	load pc IA			;interrupt address (see 5.)
 
 Returning via the Type C code path occurs when the MMR is non-zero but the CPU's M flag is zero. The IRET statement performs:
 
-	set status 0x0b		;enable M
+	set status 0x23		;enable M
 	copy sp ra			;restore stack pointer
 	popa				;restore all registers
 
@@ -1575,18 +1643,18 @@ Firing the interrupt for a Type D is equivalent to the following:
 	real ra sp			;get real address of stack pointer
 	lmmt IMMT			;load interrupt's MMT
 	unreal.i pc IA		;get mapped address of interrupt's entry point
-	enable status 0x18	;enable RM0
-	disable status 0x19	;disable RM1
+	enable status 0x30	;enable RM0
+	disable status 0x31	;disable RM1
 
 The decision to IRET via the Type D path is made by noticing that the M flag is enabled, and that the RM0 flag is enabled, but the RM1 flag is disabled. Without the RM0 and RM1 status, the CPU would not be able to distinguish between Type B, C, and E returns.
 
 The IRET of Type D does the following:
 
-	disable status 0x0b	;clear M
-	disable status 0x18	;disable RM0
+	disable status 0x23	;clear M
+	disable status 0x30	;disable RM0
 	copy sp ra			;restore stack pointer
 	pop MMR				;restore MMT
-	enable status 0x0b	;set M
+	enable status 0x23	;set M
 	popa				;restore all other registers, including pc
 
 
@@ -1597,19 +1665,19 @@ In a Type E interrupt, control moves from one address to another while preservin
 Firing a Type E interrupt is equivalent to:
 
 	pusha
-	clear status 0x0b	;clear M
+	clear status 0x23	;clear M
 	copy ra sp			;back up stack pointer
 	copy pc IA			;jump to interrupt body
-	set status 0x0b		;set M
-	set status 0x19		;enable RM1
-	clear status 0x18	;disable RM0
+	set status 0x23		;set M
+	clear status 0x30	;disable RM0
+	set status 0x31		;enable RM1
 
 When the IRET statement is reached, the CPU recognizes a Type E IRET by noticing the M and RM1 status are enabled, but the RM0 flag is disabled. It then executes:
 
-	clear status 0x19	;disable RM1
-	clear status 0x0b	;clear M
+	clear status 0x31	;disable RM1
+	clear status 0x23	;clear M
 	copy sp ra			;restore stack pointer
-	set status 0x0b		;set M
+	set status 0x23		;set M
 	popa
 
 
@@ -1709,7 +1777,7 @@ In CHASM, there are 8 rings. Bits 0x08 to 0x0a of the status register specify th
 The rings are defined as follows:
 
 	Ring 0 - Kernel - No restrictions
-	Ring 1 - Microkernel server - Cannot alter status flags M, R0, R1, R2, CI
+	Ring 1 - Microkernel server - Can only alter status flags 0-0x1f (bottom half of register)
 	Ring 2 - Daemon
 	Ring 3 - User-Mode Driver
 	Ring 4 - User Session - Cannot write to mapped device memory or call device interrupts
@@ -1986,7 +2054,7 @@ Video memory begins with the following 16-byte data structure:
 		default = 0x0400 (1024 px)
 	2 bytes unused
 	8 bytes current frame start (measured in bytes, from start of video memory)
-		default = 0x00100000 (1 MB)
+		default = 0x0000000000100000 (1 MB)
 
 ATHARTI has two memory systems, one exposed here and another called the image buffer. The image buffer is updated whenever the device control interrupt is sent (default = 0xd1). This serves to prevent screen tearing. In the emulator this is implemented as an SDL Texture. The provision of an exact byte offset assists in implementation of smooth full-screen scrolling.
 

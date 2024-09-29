@@ -40,6 +40,6 @@ struct token {
 };
 
 char* make_literal_output(unsigned long long source, unsigned short bytes);
-link<token>* tokenize(char* raw_text);
+link<token>* tokenize(char* raw_text, fpos_t size);
 
 #endif // TOKEN_H
