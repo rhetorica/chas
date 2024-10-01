@@ -464,7 +464,7 @@ Word	Bitmask				CHAS Mnemonic		Description
 2???	0010 10?? ???? ????						debugging functions (see 3.5.)
 2???	0010 11vv vvvv rrrr test r v			set flag E and clear flag Z if bit v of r is true, otherwise clear E and set Z
 
-3Tsr	0011 TTTT ssss rrrr	update r s T		Store 64-bit value from (void*) s in r. If (void*)s is <= T, set to T. #NEW#
+3Tsr	0011 TTTT ssss rrrr	update r s T		load r s. if r < T, store T s. cmp r T. #NEW#
 
 4???	0100 ???? ???? ????						positive jump instructions (see 3.2.)
 
@@ -1421,15 +1421,18 @@ An IAT entry is as follows:
 	1 bit: is this a device interrupt?
 	
 	8 bits: device address (for device interrupts)
-	8 bits: mask for each ring (0-7)
-	40 bits unused
+	8 bits: trigger mask for each ring (0-7)
+	8 bits: call mask for each ring (0-7)
+	32 bits unused
 	64 bits address to jump to (memory words)
 	64 bits unused
 	64 bits address of MMT to use during interrupt
 
 To trap an interrupt, simply write an entry on the interrupt address table. When a device's Event Interrupt Number is set (see 8. DEVICE MANAGEMENT TABLE), the DMU automatically overwrites its incoming and outgoing interrupts in the IAT.
 
-The interrupt masks determine which interrupts can fire while the CPU is executing code in the corresponding ring. If a bit is 1, then the interrupt is allowed to fire; otherwise it is simply marked as pending.
+The interrupt trigger masks determine which interrupts can fire while the CPU is executing code in the corresponding ring. If a bit is 1, then the interrupt is allowed to fire; otherwise it is simply marked as pending.
+
+The interrupt call masks determine which interrupts a program can call. If a bit is 1, then the interrupt is allowed to be called; otherwise it is ignored. The call mask for ring 0 is ignored.
 
 By convention, interrupts use registers in descending order for parameter passing, suggesting the mnemonic "register 'H' stands for 'Hardware' interrupts, and register 'A' is for 'Application' data."
 
@@ -1848,7 +1851,7 @@ The entries are structured as follows:
 		0x0122 = pressure-sensitive drawing tablet pen
 		0x0200 = drive interface
 		0x075a = drakira vector processor
-		0x1000 = framebuffer video
+		0x1000 = atharti video
 		0x2000 = camera
 		0x5001 = beeper
 		0x5005 = audio out
@@ -2039,24 +2042,88 @@ It maps 32 MB (32,768 pages) of memory, generally starting at 0x060000000000.
 
 Video memory begins with the following 16-byte data structure:
 
-	1 byte refresh rate (Hz)
+	1 byte refresh rate (Hz) - not adjustable in emulator
 		default = 0x3c (60 FPS)
-	1 byte pixel format:
+	1 byte unused
+	2 bytes screen width
+		default = 0x0500 (1280 px)
+	2 bytes screen height
+		default = 0x0400 (1024 px)
+	1 byte unused
+	1 byte pixel format - not adjustable for screen in emulator
 		0x00 = bitmap (1 bpp)
 		0x01 = 16 colors (4 bpp)
 		0x02 = 3-bit R, 3-bit G, 2-bit B (8 bpp)
 		0x03 = 5-bit R, 6-bit G, 5-bit B (16 bpp)
 		0x04 = 8-bit R, 8-bit G, 8-bit B (24 bpp)
 		0x05 = 8-bit gap, 8-bit R, 8-bit G, 8-bit B (32 bpp) - default
-	2 bytes screen width
-		default = 0x0500 (1280 px)
-	2 bytes screen height
-		default = 0x0400 (1024 px)
-	2 bytes unused
-	8 bytes current frame start (measured in bytes, from start of video memory)
+	8 bytes current screen buffer start (measured in bytes, from start of video memory)
 		default = 0x0000000000100000 (1 MB)
 
-ATHARTI has two memory systems, one exposed here and another called the image buffer. The image buffer is updated whenever the device control interrupt is sent (default = 0xd1). This serves to prevent screen tearing. In the emulator this is implemented as an SDL Texture. The provision of an exact byte offset assists in implementation of smooth full-screen scrolling.
+ATHARTI has two memory systems, one exposed here and another called the image buffer. The image buffer is updated by calling the device control interrupt (default = 0xd1) when register h is 0. This serves to prevent screen tearing. In the emulator this is implemented as an SDL Texture. The provision of an exact byte offset assists in implementation of smooth full-screen scrolling.
+
+
+10.1.1. 2D Acceleration
+
+Directly writing to a 32-bit framebuffer device is potentially very tedious for a low-level application, especially under the constraints of 16-bit memory granularity. Therefore ATHARTI has a range of 2D acceleration features. In the emulator these are implemented by calls to SDL.
+
+A drawing surface in ATHARTI is called a texture. These have a short header followed by raw pixel data. The header is:
+
+	2 bytes 0x5654 ("VT", i.e. Video Texture)
+	2 bytes width
+	2 bytes height
+	1 byte unused
+	1 byte pixel format (see 10.1.)
+
+This prefix is not found on the screen buffer, which reads the same metadata from the start of video memory instead.
+
+	Reg h	Reg g		Reg f		Reg e		Reg d		Effect
+	0		-			-			-			-			Display current image buffer
+	1		addr		addr		-1			-			Copy a texture in its current pixel format from g to f
+															if f is 0, copies to current image buffer
+	1		addr		addr		new-depth	-			Copy a texture, or convert a texture, at g, to a new pixel format, written at f
+															if f is 0, copies to current image buffer
+	2		color		mode			-			-		Set drawing color, in ARGB format, and render blending mode (see below)
+	3		addr		-			-			-			Get image width in h, height in g, bpp in f, total size (in words) in e
+	4		addr		addr		rect		point		Copy rect from g to f
+															if rect is -1, copies full source texture
+	5		addr		seg			-			-			Draws line seg on texture at g
+	6		addr		rect		-			-			Draw 1 px rect outline
+	7		addr		rect		-			-			Fill rect
+	8		addr		pointlist	-			-			Draw series of lines
+	9														(unused)
+	10		addr		pointlist	-			-			Draw closed polygon #NEW#
+	11		addr		pointlist	-			-			Draw filled polygon #NEW#
+	12		addr		rect		-			-			Draw ellipse #NEW#
+	13		addr		rect		-			-			Fill ellipse #NEW#
+	14		addr		?			?			?			Draw Bezier curve #NEW#
+	15		addr		?			?			?			Fill Bezier curve #NEW#
+
+N.B. -1 = 0xffffffffffffffff
+
+Formats
+
+	Name		Definition
+	point		16-bit integer pixel coordinates: (x << 16) | y
+	rect		16-bit integer pixel coordinates: (left << 48) | (top << 32) | (width << 16) | height
+				if -1, assumes full texture
+	seg			(left << 48) | (top << 32) | (right << 16) | bottom
+	new-depth	See 10.1.
+	addr		Any memory address, representing a texture
+	color		(alpha << 24) | (red << 16) | (green << 8) | blue
+	path		Reference to address containing a 64-bit length (in bytes) followed by 32-bit point coordinates
+				e.g. 0000 0000 0000 000c 0000 0000 0010 0010 0020 0040 is a path from (0,0) to (16,16) to (20,40)
+
+Render Blending Modes
+
+	#	Mode					Function
+	0	no blending				dstRGBA = srcRGBA
+	1	straight alpha			dstRGB = (srcRGB * srcA) + (dstRGB * (1-srcA)), dstA = srcA + (dstA * (1-srcA))
+	2	additive				dstRGB = (srcRGB * srcA) + dstRGB, dstA = dstA
+	4	color modulate			dstRGB = srcRGB * dstRGB, dstA = dstA
+	8	color multiply			dstRGB = (srcRGB * dstRGB) + (dstRGB * (1-srcA)), dstA = dstA
+	16	pre-multiplied alpha	dstRGBA = srcRGBA + (dstRGBA * (1-srcA))
+	32	pre-multiplied additive	dstRGB = srcRGB + dstRGB, dstA = dstA
 
 
 10.2. The Loec Pointer Device

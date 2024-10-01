@@ -2,7 +2,7 @@
 
 # CHAS Assembler for CHASM
 
-This VS Code project implements an assembler for the CHASM CPU. It is written in C with a very restrained amount of C++.
+This VS Code project implements an assembler for the CHASM CPU. It is written in mostly-procedural C++, with only a little OOP.
 
 The code is very basic and has a lot of avoidable copy-and-pasting in it; CHAS is meant to be adequate, not good.
 
@@ -25,7 +25,7 @@ Arguments are parsed from left to right, so `--base` and `--o` must precede `<fi
 
 ## The CHAS assembly language
 
-The opcodes and instructions are defined in `doc/chasm-spec.txt`, section 3.
+The opcodes and instructions are defined in https://github.com/rhetorica/chas/blob/master/doc/chasm-spec.txt
 
 The file `doc/CHAS.xml` provides syntax highlighting for Notepad++ in UDL format.
 
