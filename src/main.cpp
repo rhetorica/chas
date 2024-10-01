@@ -240,8 +240,8 @@ int main(int argc, char* argv[]) {
 						ap = 0;
 
 					#define EMIT_OPTABLE(final_emission, rr0, rr1, rr2, rb, rvp, rap, rskip, rw, rsub0, rsub1, rsub2) \
-					printf("\t{0x%04x, &op_%s,\t%3d, %3d, %3d, 0x%02x, %d, %d, %d, %d, 0x%016llx}, // %s %s %s %s \n", \
-						final_emission, functext, rr0, rr1, rr2, rb, rvp, rap, rskip, rw, F, o->child->text, rsub0, rsub1, rsub2);
+					printf("\t{0x%04x, &op_%s,\t%3d, %3d, %3d, 0x%02x, %d, %d, %d}, // %s %s %s %s \n", \
+						final_emission, functext, rr0, rr1, rr2, rb, (rvp << 1) | rap, rskip, rw, o->child->text, rsub0, rsub1, rsub2);
 					
 					if(F & O_MONO) {
 						for(r0 = 0; r0 < 16; r0++) {
