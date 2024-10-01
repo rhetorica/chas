@@ -11,7 +11,7 @@ The code is very basic and has a lot of avoidable copy-and-pasting in it; CHAS i
 
 CHAS has no dependencies. It should build with a simple `cmake -S src build; cmake --build build` in the project's root directory.
 
-The syntax is:
+The syntax for running CHAS is:
 
 	`chas [--print-opcodes] [--base <address>] [--o <filename>] <filename>`
 
@@ -32,4 +32,4 @@ The file `doc/CHAS.xml` provides syntax highlighting for Notepad++ in UDL format
 
 ## Lethe
 
-CHAS is a component of the LETHE hobbyist operating system project. Read more at http://lethe.rhetori.ca/
+This repository is a component of the LETHE project, which aims to build a complete software stack based on the Dhar programming language. Read more at http://lethe.rhetori.ca/
