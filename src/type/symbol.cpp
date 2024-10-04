@@ -17,9 +17,112 @@ struct emission {
     fpos_t repeats = 0; // additional bytes to append, not counting size
 };
 
+struct definition {
+    token* replacement;
+    char* text;
+};
+
 link<patch_address>* unpatched = NULL;
 link<emission>* emissions = NULL;
 link<emission>* last_emission = NULL;
+link<definition>* definitions = NULL;
+
+int gather_definitions(link<token>* t) {
+    printf(" -- gathering definitions...\n");
+    link<definition>* last_definition;
+
+    // line number in current file:
+    fpos_t ln = 0;
+    // current file:
+    char* filename;
+    while(t != NULL) {
+        while(t->child->line == 0) {
+            t = t->next;
+        }
+        fpos_t new_ln = t->child->line;
+        if(new_ln != ln || filename != t->child->filename) {
+            ln = new_ln;
+            filename = t->child->filename;
+            if(t->child->type == TK_NAME && strcmp(t->child->text, "define") == 0) {
+                link<definition>* d = new link<definition>;
+                if(t->next == NULL) {
+                    fprintf(stderr, " -- truncated definition on line %lli of %s\n", ln, filename);
+                    return 1;
+                }
+
+                if(t->next->next == NULL) {
+                    fprintf(stderr, " -- truncated definition on line %lli of %s\n", ln, filename);
+                    return 1;
+                }
+
+                if(t->next->child->line != ln || t->next->child->filename != filename) {
+                    fprintf(stderr, " -- truncated definition on line %lli of %s\n", ln, filename);
+                    return 1;
+                }
+
+                if(t->next->next->child->line != ln || t->next->next->child->filename != filename) {
+                    fprintf(stderr, " -- truncated definition on line %lli of %s\n", ln, filename);
+                    return 1;
+                }
+
+                printf(" -- found definition %s='%s' on line %lli of %s\n",
+                    t->next->child->text,
+                    t->next->next->child->text,
+                    t->child->line,
+                    t->child->filename
+                );
+
+                t->next->child->type = TK_DEFINITION;
+                d->child = new definition;
+                d->child->text = t->next->child->text;
+                d->child->replacement = t->next->next->child;
+
+                if(last_definition != NULL)
+                    last_definition->next = d;
+                
+                last_definition = d;
+                
+                if(definitions == NULL)
+                    definitions = d;
+            }
+        }
+        t = t->next;
+    }
+
+    return 0;
+}
+
+int apply_definitions(link<token>* t) {
+    printf(" -- applying definitions...\n");
+
+    while(t != NULL) {
+        while(t->child->line == 0) {
+            t = t->next;
+        }
+        
+        if(t->child->type == TK_NAME) {
+            link<definition>* d = definitions;
+            while(d != NULL) {
+                if(strcmp(t->child->text, d->child->text) == 0) {
+                    printf(" -- substituting '%s' on line %lli of %s\n", t->child->text, t->child->line, t->child->filename);
+                    
+                    free(t->child->text);
+                    t->child->text = d->child->replacement->text;
+                    t->child->type = d->child->replacement->type;
+                    t->child->literal_numeric_value = d->child->replacement->literal_numeric_value;
+                    t->child->reg = d->child->replacement->reg;
+                    t->child->output = d->child->replacement->output;
+                    t->child->output_size = d->child->replacement->output_size;
+                    
+                    // other attributes haven't been added yet
+                }
+                d = d->next;
+            }
+        }
+        t = t->next;
+    }
+    return 0;
+}
 
 int write_emissions(char* filename) {
     printf(" -- writing output...\n");
@@ -141,7 +244,10 @@ int symbolize(link<token>* t) {
             ln = new_ln;
             filename = t->child->filename;
             printf("line %lli of %s: %s\n", ln, filename, t->child->text);
-            if(strcmp(t->child->text, "embed") == 0) {
+            if(t->child->type == TK_NAME && strcmp(t->child->text, "define") == 0) {
+                // skip:
+                t = t->next->next;
+            } else if(t->child->type == TK_NAME && strcmp(t->child->text, "embed") == 0) {
                 if(t->next->child->type == TK_LIT_STRING) {
                     char* embed_filename = t->next->child->text;
                     link<emission>* new_emission = new link<emission>;

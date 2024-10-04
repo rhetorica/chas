@@ -92,9 +92,19 @@ int process(char* filename) {
 
 int output(char* output_filename) {
 	printf(" -- beginning code generation\n");
+	int failures;
 
 	if(all_tokens != NULL) {
-		int failures = collect_labels(all_tokens);
+		failures = collect_labels(all_tokens);
+		if(failures)
+			return failures;
+	} else {
+		fprintf(stderr, " -- failed to tokenize\n");
+		return 1;
+	}
+
+	if(labels != NULL) {
+		failures = gather_definitions(all_tokens);
 		if(failures)
 			return failures;
 	} else {
@@ -102,15 +112,14 @@ int output(char* output_filename) {
 		return 1;
 	}
 
-	if(labels != NULL) {
-		int failures = symbolize(all_tokens);
-		if(failures)
-			return failures;
-	} else {
-		fprintf(stderr, " -- failed to decorate\n");
-		return 1;
-	}
-
+	failures = apply_definitions(all_tokens);
+	if(failures)
+		return failures;
+	
+	failures = symbolize(all_tokens);
+	if(failures)
+		return failures;
+	
 	int patch_failures = apply_patches();
 	if(patch_failures)
 		return patch_failures;

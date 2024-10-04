@@ -17,6 +17,7 @@
 #define TK_LIT_DWORD 13
 #define TK_LIT_WORD 14
 #define TK_LIT_BYTE 15
+#define TK_DEFINITION 16
 
 struct token {
 	unsigned short type = 0;
@@ -25,7 +26,7 @@ struct token {
 	fpos_t line;
 	fpos_t number;
     fpos_t address;
-    char* output;
+    char* output = NULL;
     fpos_t output_size;
     opcode* op;
     token* arg_0;

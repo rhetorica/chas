@@ -14,7 +14,7 @@
                                Pharos Computer Inc
 
                                Created: 2024-08-19
-                               Updated: 2024-10-01
+                               Updated: 2024-10-04
 
 
 
@@ -1320,7 +1320,10 @@ pad <label>+<end>
     add current offset as referenceable address
 
 define <name> <literal>
-    define constant as hex or decimal literal
+    define constant (<literal> may be any token)
+
+embed <filename>
+	directly insert a binary file into the output image; length must be an even number of bytes
 
 ; comment
 

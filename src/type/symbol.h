@@ -11,6 +11,8 @@
 
     extern link<label>* labels;
     int collect_labels(link<token>*);
+    int gather_definitions(link<token>*);
+    int apply_definitions(link<token>*);
     int symbolize(link<token>*);
     int apply_patches();
     int write_emissions(char*);
