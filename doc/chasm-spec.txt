@@ -14,7 +14,7 @@
                                Pharos Computer Inc
 
                                Created: 2024-08-19
-                               Updated: 2024-10-04
+                               Updated: 2024-10-07
 
 
 
@@ -232,7 +232,7 @@ Number  Name    Description
                     22-20   0x0000000700000000      R0-R2   Ring Number (0b000-0b111)
                     23      0x0000000800000000      M       Memory Map Enable       
                     24      0x0000001000000000      IP      Interrupt Pending - set to 1 when a masked interrupt occurs
-                    25      0x0000002000000000      J       CPU jumped last instruction     
+                    25      0x0000002000000000      
                     26      0x0000004000000000      H       Halt - this CPU stops
                     27      0x0000008000000000      
                     
@@ -453,9 +453,9 @@ Word    Bitmask             CHAS Mnemonic       Description
 1eSr    0001 1110 SSSS 0rrr store.o r S         store 128 bits to (void*)s from r and r.d (r must be a-h)
 1dfr    0001 1101 1111 0rrr load.oi r <addr>    load 128 bits from <addr> into r and r.d (r must be a-h)
 1efr    0001 1110 1111 0rrr store.oi r <addr>   store 128 bits to <addr> from r and r.d (r must be a-h)
-1cSr    0001 1100 SSSS 0rrr load.co r S         load 128 bits from (void*)s.d into r and r.d (r must be a-h)
+1cSr    0001 1100 SSSS 0rrr load.co r S         load 128 bits from (void*)s.d into r and r.d (r and s must be a-h)
 1cSr    0001 1100 SSSS 0rrr follow.d r S        CHAS synonym for load.co
-1fSr    0001 1111 SSSS 0rrr store.co r S        store 128 bits to (void*)s.d from r and r.d (r must be a-h)
+1fSr    0001 1111 SSSS 0rrr store.co r S        store 128 bits to (void*)s.d from r and r.d (r and s must be a-h)
 1bSr    0001 1011 SSSS 0rrr setcdr r S          copy value of s.a into r.d (r must be a-h)
 
 
@@ -2053,13 +2053,13 @@ Video memory begins with the following 16-byte data structure:
     2 bytes screen height
         default = 0x0400 (1024 px)
     1 byte unused
-    1 byte pixel format - not adjustable for screen in emulator
-        0x00 = bitmap (1 bpp)
-        0x01 = 16 colors (4 bpp)
-        0x02 = 3-bit R, 3-bit G, 2-bit B (8 bpp)
-        0x03 = 5-bit R, 6-bit G, 5-bit B (16 bpp)
-        0x04 = 8-bit R, 8-bit G, 8-bit B (24 bpp)
-        0x05 = 8-bit gap, 8-bit R, 8-bit G, 8-bit B (32 bpp) - default
+    1 byte pixel format
+        0x00 = 1-bit mono (1 bpp)
+        0x01 = 1 bit B, 1 bit G, 1 bit R, 1 bit high (4 bpp)
+        0x02 = LETHE basic palette (8 bit, indexed)
+        0x03 = 4-bit B, 4-bit G, 4-bit R, 4-bit gap (16 bpp)
+        0x04 = 8-bit B, 8-bit G, 8-bit R (24 bpp)
+        0x05 = 8-bit B, 8-bit G, 8-bit R, 8-bit gap (32 bpp) - default
     8 bytes current screen buffer start (measured in bytes, from start of video memory)
         default = 0x0000000000100000 (1 MB)
 
