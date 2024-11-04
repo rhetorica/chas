@@ -156,7 +156,22 @@ int apply_patches() {
     link<patch_address>* p = unpatched;
     while(p != NULL) {
         unsigned long long address = p->child->label->address;
-        if(p->child->instruction->output_size != 10) {
+        if(p->child->instruction->type == TK_ADDRESS_LITERAL) {
+            if(p->child->instruction->output_size != 8) {
+                fprintf(stderr, " -- internal error: 'address' directive on line %lli of %s did not allocate space for patching address literal\n", p->child->instruction->line, p->child->instruction->filename);
+                return 1;
+            } else {
+            p->child->instruction->output[0] = (address >> 56) & 0xff;
+            p->child->instruction->output[1] = (address >> 48) & 0xff;
+            p->child->instruction->output[2] = (address >> 40) & 0xff;
+            p->child->instruction->output[3] = (address >> 32) & 0xff;
+            p->child->instruction->output[4] = (address >> 24) & 0xff;
+            p->child->instruction->output[5] = (address >> 16) & 0xff;
+            p->child->instruction->output[6] = (address >>  8) & 0xff;
+            p->child->instruction->output[7] = (address >>  0) & 0xff;
+            printf(" -- patched address to '%s' (0x%llx) on line %lli of %s\n", p->child->label->text, p->child->label->address, p->child->instruction->line, p->child->instruction->filename);
+            }
+        } else if(p->child->instruction->output_size != 10) {
             fprintf(stderr, " -- internal error: instruction on line %lli of %s did not allocate space for patching address literal\n", p->child->instruction->line, p->child->instruction->filename);
             return 1;
         } else {
@@ -243,11 +258,90 @@ int symbolize(link<token>* t) {
             printf("processing line %lli\n", new_ln);
             ln = new_ln;
             filename = t->child->filename;
+
             printf("line %lli of %s: %s\n", ln, filename, t->child->text);
+
             if(t->child->type == TK_NAME && strcmp(t->child->text, "define") == 0) {
                 // skip:
+
                 t = t->next->next;
+
+            } else if(t->child->type == TK_NAME && strcmp(t->child->text, "address") == 0) {
+                // insert address literal:
+
+                int is_patched = 0;
+                t->child->type = TK_ADDRESS_LITERAL;
+                t->child->address = address + base_address;
+                link<token>* r0 = t->next;
+                link<label>* mylabel = NULL;
+                if(r0->child->line != ln || r0->child->filename != filename) {
+                    fprintf(stderr, " -- expected label but got EOL on line %lli of %s\n", ln, filename);
+                    return 1;
+                } else {
+                    link<label>* s = labels;
+                    while(s != NULL) {
+                        if(strcmp(s->child->text, r0->child->text) == 0) {
+                            fprintf(stderr, " -- label '%s' with address %016llx on line %lli of %s used on line %lli of %s\n", s->child->text, s->child->address, s->child->token->line, s->child->token->filename, ln, filename);
+                            mylabel = s;
+                            break;
+                        }
+                        s = s->next;
+                    }
+
+                    if(mylabel == NULL) {
+                        fprintf(stderr, " -- undefined name '%s' on line %lli of %s\n", r0->child->text, ln, filename);
+                        return 1;
+                    } else {
+                        t->child->literal = r0->child;
+                        r0->child->label = mylabel->child;
+                        r0->child->literal_numeric_value = r0->child->label->address;
+                        if(mylabel->child->address == (unsigned long long)-1) {
+                            printf(" -- unpatched address; adding to patch queue\n");
+                            link<patch_address>* new_patch = new link<patch_address>;
+                            new_patch->child = new patch_address;
+                            new_patch->child->instruction = t->child;
+                            new_patch->child->label = mylabel->child;
+                            new_patch->next = unpatched;
+                            unpatched = new_patch;
+                        } else {
+                            is_patched = 1;
+                        }
+                    }
+                }
+
+                link<emission>* new_emission = new link<emission>;
+                new_emission->child = new emission;
+                new_emission->child->origin = t->child;
+                // new_emission->child->text = ins->child->output;
+                // new_emission->child->size = ins->child->output_size;
+                if(last_emission != NULL)
+                    last_emission->next = new_emission;    
+                else
+                    emissions = new_emission;
+                
+                new_emission->next = NULL;
+                last_emission = new_emission;
+                t->child->output_size = new_emission->child->size = 8;
+                t->child->output = new_emission->child->text = (char*)malloc(sizeof(char) * 8);
+                
+                printf(" -- allocated 64-bit emission for insertion of address '%s'\n", r0->child->text);
+                if(is_patched) {
+                    new_emission->child->text[0] = ((r0->child->literal_numeric_value) >> 56) & 0xff;
+                    new_emission->child->text[1] = ((r0->child->literal_numeric_value) >> 48) & 0xff;
+                    new_emission->child->text[2] = ((r0->child->literal_numeric_value) >> 40) & 0xff;
+                    new_emission->child->text[3] = ((r0->child->literal_numeric_value) >> 32) & 0xff;
+                    new_emission->child->text[4] = ((r0->child->literal_numeric_value) >> 24) & 0xff;
+                    new_emission->child->text[5] = ((r0->child->literal_numeric_value) >> 16) & 0xff;
+                    new_emission->child->text[6] = ((r0->child->literal_numeric_value) >>  8) & 0xff;
+                    new_emission->child->text[7] = ((r0->child->literal_numeric_value) >>  0) & 0xff;
+                }
+                address += 4;
+                t = t->next;
+
             } else if(t->child->type == TK_NAME && strcmp(t->child->text, "embed") == 0) {
+
+                // embed external binary file:
+
                 if(t->next->child->type == TK_LIT_STRING) {
                     char* embed_filename = t->next->child->text;
                     link<emission>* new_emission = new link<emission>;
@@ -279,6 +373,9 @@ int symbolize(link<token>* t) {
                     return 1;
                 }
             } else if(t->child->type == TK_NAME) {
+
+                // resolve opcode:
+
                 opcode* o = find_opcode(t->child->text);
                 if(o != NULL) {
                     link<token>* ins = t;
@@ -329,18 +426,6 @@ int symbolize(link<token>* t) {
                             opcode_emission = (opcode_emission & 0xfff0) | (r0->child->reg->number & 0xf);
                             ins->child->arg_0 = r0->child;
                             t = t->next;
-                        } else if(r0->child->type == TK_LABEL_USAGE) {
-                            TRAILER_SIZE = 4;
-                            if(ins->child->op->format & (O_LIT_REF)) {
-                                printf("got label argument %s=%llu\n", r0->child->text, r0->child->literal_numeric_value);
-                                opcode_emission = (opcode_emission & 0xfff0) | 0xf;
-                                ins->child->literal = r0->child;
-
-                                t = t->next;
-                            } else {
-                                fprintf(stderr, " -- encountered label usage %s on line %lli of %s but opcode does not expect reference literal\n", r0->child->text, ln, filename);
-                                return 1;
-                            }
                         } else if(r0->child->type == TK_LIT_QWORD) {
                             TRAILER_SIZE = 4;
                             if(ins->child->op->format & (O_LIT_64 | O_LIT_REF)) {
@@ -516,18 +601,7 @@ int symbolize(link<token>* t) {
 
                     if(ins->child->op->format & O_MONO_AND_LIT) {
                         link<token>* r1 = t->next;
-                        if(r1->child->type == TK_LABEL_USAGE) {
-                            TRAILER_SIZE = 4;
-                            if(ins->child->op->format & (O_LIT_REF)) {
-                                printf("got label argument %s=%llu\n", r1->child->text, r1->child->literal_numeric_value);
-                                ins->child->literal = r1->child;
-
-                                t = t->next;
-                            } else {
-                                fprintf(stderr, " -- encountered label usage '%s' on line %lli of %s but opcode does not expect reference literal\n", r1->child->text, ln, filename);
-                                return 1;
-                            }
-                        } else if(r1->child->type == TK_LIT_QWORD) {
+                        if(r1->child->type == TK_LIT_QWORD) {
                             TRAILER_SIZE = 4;
                             if(ins->child->op->format & (O_LIT_64 | O_LIT_REF)) {
                                 printf("got 64-bit literal argument %s=%llu\n", r1->child->text, r1->child->literal_numeric_value);
@@ -633,18 +707,7 @@ int symbolize(link<token>* t) {
 
                     if(ins->child->op->format & O_DUO_AND_LIT) {
                         link<token>* r2 = t->next;
-                        if(r2->child->type == TK_LABEL_USAGE) {
-                            TRAILER_SIZE = 4;
-                            if(ins->child->op->format & (O_LIT_REF)) {
-                                printf("got label argument %s=%llu\n", r2->child->text, r2->child->literal_numeric_value);
-                                ins->child->literal = r2->child;
-
-                                t = t->next;
-                            } else {
-                                fprintf(stderr, " -- encountered label usage '%s' on line %lli of %s but opcode does not expect reference literal\n", r2->child->text, ln, filename);
-                                return 1;
-                            }
-                        } else if(r2->child->type == TK_LIT_QWORD) {
+                        if(r2->child->type == TK_LIT_QWORD) {
                             TRAILER_SIZE = 4;
                             if(ins->child->op->format & (O_LIT_64 | O_LIT_REF)) {
                                 printf("got 64-bit literal argument %s=%llu\n", r2->child->text, r2->child->literal_numeric_value);
@@ -834,18 +897,7 @@ int symbolize(link<token>* t) {
                         }
 
                         link<token>* r1 = t->next;
-                        if(r1->child->type == TK_LABEL_USAGE) {
-                            TRAILER_SIZE = 4;
-                            if(ins->child->op->format & (O_LIT_REF)) {
-                                printf("got label argument %s=%llu\n", r1->child->text, r1->child->literal_numeric_value);
-                                ins->child->literal = r1->child;
-
-                                t = t->next;
-                            } else {
-                                fprintf(stderr, " -- encountered label usage '%s' on line %lli of %s but opcode does not expect reference literal\n", r1->child->text, ln, filename);
-                                return 1;
-                            }
-                        } else if(r1->child->type == TK_LIT_QWORD) {
+                        if(r1->child->type == TK_LIT_QWORD) {
                             TRAILER_SIZE = 4;
                             if(ins->child->op->format & (O_LIT_64 | O_LIT_REF)) {
                                 printf("got 64-bit literal argument %s=%llu\n", r1->child->text, r1->child->literal_numeric_value);
@@ -959,18 +1011,6 @@ int symbolize(link<token>* t) {
                             opcode_emission = (opcode_emission & 0xf0ff) | (((unsigned short)(r2->child->reg->number) & 0xf) << 8);
                             ins->child->arg_2 = r2->child;
                             t = t->next;
-                        } else if(r2->child->type == TK_LABEL_USAGE) {
-                            TRAILER_SIZE = 4;
-                            if(ins->child->op->format & (O_LIT_REF)) {
-                                printf("got label argument %s=%llu\n", r2->child->text, r2->child->literal_numeric_value);
-                                opcode_emission = opcode_emission | 0x0f00;
-                                ins->child->literal = r2->child;
-
-                                t = t->next;
-                            } else {
-                                fprintf(stderr, " -- encountered label usage '%s' on line %lli of %s but opcode does not expect reference literal\n", r2->child->text, ln, filename);
-                                return 1;
-                            }
                         } else if(r2->child->type == TK_LIT_QWORD) {
                             TRAILER_SIZE = 4;
                             if(ins->child->op->format & (O_LIT_64 | O_LIT_REF)) {
@@ -1161,6 +1201,8 @@ int symbolize(link<token>* t) {
                    || t->child->type == TK_LIT_DWORD
                    || t->child->type == TK_LIT_WORD
                    || t->child->type == TK_LIT_BYTE) {
+                
+                // resolve to embed literal:
                 
                 link<emission>* new_emission = new link<emission>;
                 new_emission->child = new emission;

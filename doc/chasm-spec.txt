@@ -1327,6 +1327,9 @@ define <name> <literal>
 embed <filename>
 	directly insert a binary file into the output image; length must be an even number of bytes
 
+address <label>
+	embed an address directly as a qword literal
+
 ; comment
 
 The CHAS syntax described here does not support any sort of syntactic sugar for dereferencing.

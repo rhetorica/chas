@@ -10,7 +10,7 @@
 #define TK_BEGIN 6
 #define TK_NAME 7
 #define TK_LIT_STRING 8
-#define TK_LABEL_USAGE 9
+#define TK_ADDRESS_LITERAL 9
 #define TK_PLUS 10
 #define TK_MINUS 11
 #define TK_LIT_QWORD 12
