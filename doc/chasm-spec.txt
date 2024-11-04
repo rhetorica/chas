@@ -14,7 +14,7 @@
                                Pharos Computer Inc
 
                                Created: 2024-08-19
-                               Updated: 2024-10-07
+                               Updated: 2024-11-03
 
 
 
@@ -380,11 +380,13 @@ Word    Bitmask             CHAS Mnemonic       Description
 012R    0000 0001 0010 RRRR push.w R            push lower quarter of register r (16-bit word), or literal
 014R    0000 0001 0100 RRRR push.d R            push lower half of register r (double word), or literal
 018R    0000 0001 1000 RRRR push R              push register r, or literal
+01fR    0000 0001 1000 0RRR push.o R            push registers r and r.d
 021f    0000 0010 0001 1111 pop.h               pop all data registers (a-h, a.d-h.d) from stack
 023f    0000 0010 0011 1111 pop.a               pop all registers from stack except pc and status
 022r    0000 0010 0010 rrrr pop.w r             pop lower quarter register r (16-bit word)
 024r    0000 0010 0100 rrrr pop.d r             pop lower half of register r (double word)
 028r    0000 0010 1000 rrrr pop r               pop register r
+02fR    0000 0001 1000 0RRR pop.o R             pop registers r and r.d from stack
 
 030r    0000 0011 0000 rrrr rev r               reverse the order of all the bits in register r
 031r    0000 0011 0001 rrrr swap2 r             swap odd and even bits in r

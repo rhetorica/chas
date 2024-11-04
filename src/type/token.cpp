@@ -58,6 +58,10 @@ link<token>* add_token(link<token>* last_token, char* raw_text, fpos_t word_star
 	
 	if(token_type == TK_NAME) {
 		char* text = new_token->child->text; // for brevity
+		if(text[0] == '*') {
+			text = &(text[1]);
+			new_token->child->indirect = true;
+		}
 		reg* r = find_register(text);
 		if(r != NULL) {
 			new_token->child->reg = r;

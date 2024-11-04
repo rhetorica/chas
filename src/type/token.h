@@ -38,6 +38,7 @@ struct token {
     reg* reg;
     unsigned long long literal_numeric_value;
     char* filename;
+    bool indirect = false; // 1 if the register was prefixed with *
 };
 
 char* make_literal_output(unsigned long long source, unsigned short bytes);

@@ -41,10 +41,12 @@ void init_opcodes() {
     opcodes->next = NULL;
     link<opcode>* last_opcode = opcodes;
 
+    last_opcode = add_opcode(last_opcode, n++, "push.o",  0x01f0, O_MONO | O_PROC_128);
     last_opcode = add_opcode(last_opcode, n++, "push",    0x0180, O_MONO_OR_LIT | O_LIT_64);
     last_opcode = add_opcode(last_opcode, n++, "push.q",  0x0180, O_MONO_OR_LIT | O_LIT_64 | O_ALIAS);
     last_opcode = add_opcode(last_opcode, n++, "push.d",  0x0140, O_MONO_OR_LIT | O_LIT_32 | O_PROC_32);
     last_opcode = add_opcode(last_opcode, n++, "push.w",  0x0120, O_MONO_OR_LIT | O_LIT_16 | O_PROC_16);
+    last_opcode = add_opcode(last_opcode, n++, "push.o",  0x02f0, O_MONO | O_PROC_128);
     last_opcode = add_opcode(last_opcode, n++, "pop",     0x0280, O_MONO | O_PROC_64);
     last_opcode = add_opcode(last_opcode, n++, "pop.q",   0x0280, O_MONO | O_PROC_64 | O_ALIAS);
     last_opcode = add_opcode(last_opcode, n++, "pop.d",   0x0240, O_MONO | O_PROC_32);
